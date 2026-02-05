@@ -1,15 +1,17 @@
 from dotenv import load_dotenv
-import os
+from ingestion.load_documents import load_text_documents
 
 def main():
     load_dotenv()
 
-    api_key = os.getenv("OPENAI_API_KEY")
+    docs = load_text_documents("data")
 
-    if api_key:
-        print("✅ Environment variable loaded successfully")
-    else:
-        print("❌ OPENAI_API_KEY not found")
+    print(f"📄 Loaded {len(docs)} document(s)\n")
+
+    for doc in docs:
+        print(f"--- {doc['source']} ---")
+        print(doc["content"])
+        print()
 
 if __name__ == "__main__":
     main()
