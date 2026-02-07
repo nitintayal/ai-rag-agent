@@ -20,7 +20,16 @@ class VectorStore:
         distances, indices = self.index.search(
             np.array([query_vector]).astype("float32"), k
         )
-        return [self.documents[i] for i in indices[0]]
+
+        results = []
+        for score, idx in zip(distances[0], indices[0]):
+            results.append({
+                "document": self.documents[idx],
+                "score": float(score)
+            })
+
+        return results
+
 
     def save(self, folder_path="storage"):
         Path(folder_path).mkdir(exist_ok=True)

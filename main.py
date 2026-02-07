@@ -64,16 +64,22 @@ def main():
     results = store.search(query_vector, k=3)
 
     # ---- Collect citations ----
-    sources = sorted(set(r["source"] for r in results))
+    sources = sorted(set(r["document"]["source"] for r in results))
+
+    # ---- Confidence score ----
+    avg_confidence = sum(r["score"] for r in results) / len(results)
+    confidence_percent = round(avg_confidence * 100, 2)
+    print(f"\n💡 Confidence Score: {confidence_percent}%")
+
 
     print("\n🔍 Top search results:\n")
     for i, r in enumerate(results, start=1):
-        print(f"{i}. Source: {r['source']}")
-        print(r["content"])
+        print(f"{i}. Source: {r['document']['source']}")
+        print(r['document']['content'])
         print("-" * 40)
         # ---- Build context for LLM ----
         context = "\n\n".join(
-            f"[Source: {r['source']}]\n{r['content']}"
+            f"[Source: {r['document']['source']}]\n{r['document']['content']}"
             for r in results
         )
 
@@ -82,6 +88,8 @@ def main():
 
     print("📝 Final Answer:\n")
     print(answer)
+
+    print(f"\n📊 Confidence: {confidence_percent}%")
 
     print("\n📚 Sources:")
     for s in sources:

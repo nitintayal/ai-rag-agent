@@ -15,8 +15,7 @@ def answer_with_llm(question: str, context: str) -> str:
     prompt = f"""
 You are a helpful assistant.
 Answer the question briefly in a single liner using the context below without any additional justification.
-If the question can be answered, answer it. Else if the question cannot be answered because it is not in the context, say "Not found in the Knowledge Base."
-
+If answer not found or valid because it is not in the context, say "Not found in the Knowledge Base."
 Context:
 {context}
 
