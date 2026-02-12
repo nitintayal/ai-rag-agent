@@ -9,6 +9,10 @@ class VectorStore:
         self.index = index
         self.documents = documents
 
+    def add(self, vectors, documents):
+        self.index.add(np.array(vectors).astype("float32"))
+        self.documents.extend(documents)
+
     @classmethod
     def from_vectors(cls, vectors, documents):
         dim = len(vectors[0])

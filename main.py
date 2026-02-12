@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 
-from ingestion.load_documents import load_text_documents
+from ingestion.load_documents import load_documents
 from ingestion.chunk_documents import chunk_text
 from embeddings.sentence_embeddings import embed_texts, embed_query
 from retrieval.vector_store import VectorStore
@@ -12,7 +12,7 @@ def main():
     load_dotenv()
 
     print("📄 Loading documents...")
-    documents = load_text_documents("data")
+    documents = load_documents("data")
 
     # ---- Chunk documents ----
     print("✂️ Chunking documents...")
@@ -20,7 +20,7 @@ def main():
     for doc in documents:
         for chunk in chunk_text(doc["content"]):
             chunks.append({
-                "source": doc["source"],
+                "source": str(doc["source"]),
                 "content": chunk
             })
 
@@ -35,6 +35,26 @@ def main():
     if Path(f"{STORE_PATH}/faiss.index").exists():
         print("📦 Loading vector store from disk...")
         store = VectorStore.load(STORE_PATH)
+        existing_sources = set(doc["source"] for doc in store.documents)
+        print(f"✅ Loaded vector store with {len(existing_sources)} old documents")
+        new_docs = [
+            doc for doc in documents
+            if doc["source"] not in existing_sources
+        ]
+        print(f"🔍 Found {len(new_docs)} new documents to add")
+        if new_docs:
+            print(f"➕ Found {len(new_docs)} new documents. Updating vector store...")
+            new_chunks = []
+            for doc in new_docs:
+                for chunk in chunk_text(doc["content"]):
+                    new_chunks.append({
+                        "source": str(doc["source"]),
+                        "content": chunk
+                    })
+            new_texts = [c["content"] for c in new_chunks]
+            new_vectors = embed_texts(new_texts)
+            store.add(new_vectors, new_chunks)
+            store.save(STORE_PATH)
     else:
         print("🧠 Creating embeddings...")
         vectors = embed_texts(texts)
@@ -55,45 +75,55 @@ def main():
     # store = VectorStore(vectors, chunks)
 
     # ---- Ask a question ----
-    question = "Password expiry time?"
-    print(f"\n❓ Question: {question}")
+    while True:
+        question = input("\n❓ Ask your question (type 'exit' to quit): ")
 
-    query_vector = embed_query(question)
+        if question.lower() in ["exit", "quit"]:
+            print("👋 Goodbye!")
+            break
 
-    # ---- Semantic search ----
-    results = store.search(query_vector, k=3)
+        query_vector = embed_query(question)
+        results = store.search(query_vector, k=3)
 
-    # ---- Collect citations ----
-    sources = sorted(set(r["document"]["source"] for r in results))
-
-    # ---- Confidence score ----
-    avg_confidence = sum(r["score"] for r in results) / len(results)
-    confidence_percent = round(avg_confidence * 100, 2)
-    print(f"\n💡 Confidence Score: {confidence_percent}%")
-
-
-    print("\n🔍 Top search results:\n")
-    for i, r in enumerate(results, start=1):
-        print(f"{i}. Source: {r['document']['source']}")
-        print(r['document']['content'])
-        print("-" * 40)
-        # ---- Build context for LLM ----
         context = "\n\n".join(
             f"[Source: {r['document']['source']}]\n{r['document']['content']}"
             for r in results
         )
 
-    print("\n🤖 Generating answer with Model...\n")
-    answer = answer_with_llm(question, context)
+        print("\n🤖 Generating answer with Model...\n")
+        answer = answer_with_llm(question, context)
 
-    print("📝 Final Answer:\n")
-    print(answer)
+        print("📝 Final Answer:\n")
+        print(answer)
+                # ---- Collect citations ----
+        sources = sorted(set(r["document"]["source"] for r in results))
 
-    print(f"\n📊 Confidence: {confidence_percent}%")
+        # ---- Confidence score ----
+        avg_confidence = sum(r["score"] for r in results) / len(results)
+        confidence_percent = round(avg_confidence * 100, 2)
+        print(f"\n💡 Confidence Score: {confidence_percent}%")
 
-    print("\n📚 Sources:")
-    for s in sources:
-        print(f"- {s}")
+        print("\n📚 Sources:")
+        for s in sources:
+            print(f"- {s}")
+
+
+
+
+    # print("\n🔍 Top search results:\n")
+    # for i, r in enumerate(results, start=1):
+    #     print(f"{i}. Source: {r['document']['source']}")
+    #     print(r['document']['content'])
+    #     print("-" * 40)
+    #     # ---- Build context for LLM ----
+    #     context = "\n\n".join(
+    #         f"[Source: {r['document']['source']}]\n{r['document']['content']}"
+    #         for r in results
+    #     )
+
+
+
+
 
 
 

@@ -8,7 +8,7 @@ tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
     device_map="cpu",          # 🔴 FORCE CPU
-    torch_dtype=torch.float32  # 🔴 CPU-safe dtype
+    dtype=torch.float32  # 🔴 CPU-safe dtype
 )
 
 def answer_with_llm(question: str, context: str) -> str:
