@@ -5,9 +5,9 @@ from pathlib import Path
 
 
 class VectorStore:
-    def __init__(self, index, documents):
+    def __init__(self, index=None, documents=None):
         self.index = index
-        self.documents = documents
+        self.documents = documents or []
 
     def add(self, vectors, documents):
         self.index.add(np.array(vectors).astype("float32"))

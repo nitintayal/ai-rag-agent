@@ -13,14 +13,12 @@ model = AutoModelForCausalLM.from_pretrained(
 
 def answer_with_llm(question: str, context: str) -> str:
     prompt = f"""
-You are a helpful assistant.
-Answer the question briefly in a single liner using the context below without any additional justification.
-If answer not found or valid because it is not in the context, say "Not found in the Knowledge Base."
-Context:
-{context}
+You are a helpful assistant. OUTPUT ONLY THE ANSWER without any additional text.
+Answer the question briefly in a single liner using only the context provided below without any additional justification and output only the answer.
+If answer not found or valid because it is not in the given context, return answer "Not found in the Knowledge Base." .
+Context:{context}
 
-Question:
-{question}
+Question:{question}
 
 Answer:
 """
