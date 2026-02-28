@@ -1,0 +1,17 @@
+services:
+  rag-api:
+    build: .
+    container_name: rag-api
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - ./storage:/app/storage
+      - ./data:/app/data
+      - ~/.cache/huggingface:/root/.cache/huggingface   # ⭐ FIX
+
+    environment:
+      - HF_HUB_OFFLINE=1
+
+    restart: unless-stopped

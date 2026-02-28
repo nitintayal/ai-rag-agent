@@ -31,5 +31,7 @@ Answer:
             max_new_tokens=300,
             temperature=0.2
         )
-
-    return tokenizer.decode(output[0], skip_special_tokens=True)
+    # Extract only the newly generated tokens
+    input_length = inputs["input_ids"].shape[1]
+    generated_tokens = output[0][input_length:]
+    return tokenizer.decode(generated_tokens, skip_special_tokens=True)
