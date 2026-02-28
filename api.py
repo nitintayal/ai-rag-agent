@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from embeddings.sentence_embeddings import embed_query
 from retrieval.vector_store import VectorStore
 from agent.local_llm_answer import answer_with_llm
-
+from agent.agent_executor import run_agent
 app = FastAPI(title="Local RAG API")
 
 # Load vector store once at startup
@@ -13,7 +13,7 @@ store = VectorStore.load("storage")
 class QuestionRequest(BaseModel):
     question: str
 
-@app.post("/ask")
+@app.post("/ask-old")
 def ask_question(req: QuestionRequest):
     question = req.question
     query_vector = embed_query(question)
@@ -36,6 +36,14 @@ def ask_question(req: QuestionRequest):
         "sources": sources
     }
 
+
+
+@app.post("/ask")
+def ask_question(req: QuestionRequest):
+
+    answer = run_agent(req.question)
+
+    return {"answer": answer}
 # {
 #   "question": "How often should passwords be changed?"
 # }

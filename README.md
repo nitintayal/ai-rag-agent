@@ -1,23 +1,24 @@
 # ai-rag-agent
 
-🧠 Agentic AI RAG system — Local, Offline & Dockerized
+🧠 **Agentic AI RAG System — Local, Offline & Dockerized**
 
-An Agentic Retrieval-Augmented Generation (RAG) system built using Python, FAISS, Sentence Transformers, FastAPI, and Docker.
+An **Agentic Retrieval-Augmented Generation (RAG)** system built using **Python, FAISS, Sentence Transformers, LangGraph, FastAPI, and Docker**.
 
-This project enables question answering over your own documents using a fully local LLM pipeline, with persistent vector storage, offline inference, and containerized deployment.
+This project enables intelligent question answering over your own documents using a **local AI agent workflow**, persistent vector storage, offline inference, and containerized deployment.
 
 ---
 
-# 🔎 Local RAG Agent (Sentence Transformers + FAISS + Local LLM)
+# 🤖 Agentic Local RAG System
 
-A fully local **Retrieval-Augmented Generation (RAG)** system that answers questions using your own documents with:
+Unlike traditional RAG pipelines, this system introduces an **AI Agent layer** powered by **LangGraph**, enabling structured reasoning and tool execution.
 
-✅ Source citations
-✅ Confidence scoring
-✅ Persistent vector storage
-✅ FastAPI API
-✅ Dockerized deployment
-✅ Fully Offline Inference
+The agent dynamically executes workflow steps such as:
+
+✅ Retrieve knowledge
+✅ Process context
+✅ Generate grounded responses
+
+All running **fully locally**.
 
 No external LLM APIs required after initial model download.
 
@@ -26,43 +27,67 @@ No external LLM APIs required after initial model download.
 ## 🚀 Features
 
 * 📄 Document ingestion from local `.txt` and `.xlsx` files
-* ✂️ Intelligent text chunking
+* ✂️ Intelligent document chunking
 * 🧠 Semantic embeddings using Sentence Transformers
-* 📦 Vector similarity search using FAISS
+* 📦 FAISS vector similarity search
 * 💾 Persistent disk-backed vector database
 * 🔄 Incremental ingestion (only new documents embedded)
-* 🤖 Local LLM answering (CPU-safe)
-* 🌐 REST API using FastAPI
-* 📚 Source citations for answers
+* 🤖 **LangGraph Agent Workflow**
+* 🧰 RAG converted into Agent Tool
+* 🌐 FastAPI REST API
+* 📚 Source-aware grounded answers
 * 📊 Confidence scoring
-* 🐳 Docker & Docker Compose support
-* 🔐 Fully offline execution supported
+* 🐳 Docker & Docker Compose deployment
+* 🔐 Fully offline inference support
 
 ---
 
-## 🧠 Architecture Overview
+## 🧠 Agent Architecture Overview
 
 ```
-Documents
-   ↓
-Chunking
-   ↓
-Sentence Transformers (Embeddings)
-   ↓
-FAISS Vector Store (Persisted)
-   ↓
-Semantic Retrieval (Top-K)
-   ↓
-Local LLM (Answer Generation)
-   ↓
-Answer + Confidence + Sources
+User Question
+      ↓
+FastAPI API
+      ↓
+Agent Executor
+      ↓
+LangGraph Agent
+      ↓
+RAG Tool (Knowledge Retrieval)
+      ↓
+FAISS Vector Store
+      ↓
+Local LLM
+      ↓
+Answer + Sources + Confidence
 ```
+
+---
+
+## ⚙️ Agent Workflow (LangGraph)
+
+The AI agent executes a structured workflow:
+
+```
+retrieve → generate → END
+```
+
+### Agent Nodes
+
+| Node     | Responsibility           |
+| -------- | ------------------------ |
+| Retrieve | Searches knowledge base  |
+| Generate | Produces grounded answer |
+| End      | Returns final response   |
+
+This enables extensibility toward multi-tool autonomous agents.
 
 ---
 
 ## 🛠 Tech Stack
 
 * **Python 3.11+**
+* **LangGraph**
 * **Sentence Transformers**
 * **FAISS**
 * **HuggingFace Transformers**
@@ -78,20 +103,23 @@ Answer + Confidence + Sources
 ```
 ai-rag-agent/
 ├── agent/
+│   ├── __init__.py
+│   ├── rag_tool.py
+│   ├── agent_graph.py
+│   ├── agent_executor.py
 │   └── local_llm_answer.py
+│
 ├── embeddings/
-│   └── sentence_embeddings.py
 ├── ingestion/
-│   ├── load_documents.py
-│   └── chunk_documents.py
 ├── retrieval/
-│   └── vector_store.py
-├── data/                # Input documents
-├── storage/             # FAISS index persistence
+│
+├── data/
+├── storage/
 │   ├── faiss.index
 │   └── documents.pkl
-├── main.py              # CLI ingestion
-├── api.py               # FastAPI service
+│
+├── main.py
+├── api.py
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
@@ -119,18 +147,13 @@ pip install -r requirements.txt
 
 ---
 
-## 3️⃣ Build Vector Index (Ingestion)
+## 3️⃣ Build Vector Index
 
 ```bash
 python main.py
 ```
 
-This step:
-
-* Loads documents from `/data`
-* Splits text into chunks
-* Generates embeddings
-* Stores vectors in `/storage`
+Processes documents and builds FAISS index.
 
 ---
 
@@ -150,23 +173,7 @@ http://localhost:8000/docs
 
 # 🐳 Docker Setup
 
-## Install Docker Desktop
-
-Download:
-
-[https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/)
-
-Verify:
-
-```bash
-docker --version
-```
-
----
-
-## Build Docker Image
-
-From project root:
+## Build Image
 
 ```bash
 docker build -t ai-rag-agent .
@@ -174,7 +181,7 @@ docker build -t ai-rag-agent .
 
 ---
 
-## Run Container (Recommended)
+## Run Container
 
 ```bash
 docker run --rm \
@@ -186,27 +193,25 @@ ai-rag-agent
 
 ---
 
-## ✅ Why Volumes Are Mounted
+## ✅ Persistent Volumes
 
-| Volume            | Purpose                       |
-| ----------------- | ----------------------------- |
-| `storage/`        | Persist FAISS vector database |
-| HuggingFace cache | Prevent model re-download     |
-| Host filesystem   | Container remains stateless   |
-
-Containers can be recreated safely without data loss.
+| Volume     | Purpose             |
+| ---------- | ------------------- |
+| storage    | FAISS persistence   |
+| HF cache   | Offline models      |
+| Host mount | Stateless container |
 
 ---
 
 # 🐳 Docker Compose (Recommended)
 
-Start system:
+Start:
 
 ```bash
 docker compose up
 ```
 
-Run in background:
+Background:
 
 ```bash
 docker compose up -d
@@ -218,29 +223,11 @@ Stop:
 docker compose down
 ```
 
-Compose automatically:
-
-✅ Builds image
-✅ Mounts persistent storage
-✅ Mounts HuggingFace cache
-✅ Enables offline inference
-
----
-
-## docker-compose.yml Highlights
-
-* API container orchestration
-* Persistent vector DB
-* Shared model cache
-* Restart resilience
-
 ---
 
 # 🔐 Offline Mode
 
-After first model download, system runs fully offline.
-
-Environment variable used:
+After first download:
 
 ```
 HF_HUB_OFFLINE=1
@@ -249,39 +236,29 @@ HF_HUB_OFFLINE=1
 Mounted cache:
 
 ```
-~/.cache/huggingface → container cache
+~/.cache/huggingface → container
 ```
 
-Prevents internet downloads during runtime.
+No runtime internet dependency.
 
 ---
 
 ## 📄 Supported Documents
 
 * `.txt`
-* `.xlsx` (row-wise embedding)
+* `.xlsx`
 
-Add files into:
+Add files to:
 
 ```
 data/
 ```
 
-Then rerun:
+Re-run ingestion:
 
 ```bash
 python main.py
 ```
-
-Only new documents are embedded.
-
----
-
-## 🔄 Incremental Ingestion
-
-* Existing vectors preserved
-* Only new files processed
-* Faster updates for growing datasets
 
 ---
 
@@ -297,7 +274,7 @@ POST /ask
 
 ```json
 {
-  "question": "What is leave policy?"
+  "question": "What employee data exists?"
 }
 ```
 
@@ -306,43 +283,43 @@ POST /ask
 ```json
 {
   "answer": "...",
-  "sources": ["employee.xlsx"],
-  "confidence": 0.87
+  "confidence": 0.87,
+  "sources": ["employee.xlsx"]
 }
 ```
 
 ---
 
-## 🧠 Key Design Principles
+## 🧠 Design Principles
 
-* Containers are **stateless**
-* Persistent data stored outside containers
-* Models cached once and reused
-* Offline-first ML inference
-* Reproducible deployments
+* Stateless containers
+* Persistent vector storage
+* Tool-based agent architecture
+* Offline-first AI deployment
+* Reproducible environments
 
 ---
 
 ## 💼 Skills Demonstrated
 
-* Retrieval-Augmented Generation (RAG)
-* Vector database implementation
-* Incremental ingestion pipelines
-* FastAPI backend engineering
-* Docker containerization
-* Volume persistence strategy
-* Offline ML deployment
-* Production-ready AI architecture
+* Agentic RAG Architecture
+* LangGraph Workflow Design
+* Tool-based AI Systems
+* Vector Databases (FAISS)
+* FastAPI Backend Engineering
+* Dockerized AI Deployment
+* Offline LLM Inference
+* Production-ready AI Infrastructure
 
 ---
 
 ## 🚀 Future Enhancements
 
+* ReAct decision agent
+* Multi-tool routing
+* Conversation memory
 * Redis caching
-* Hybrid search (BM25 + Vector)
 * Streaming responses
-* Async ingestion workers
-* Dedicated model service
 * Kubernetes deployment
 
 ---
