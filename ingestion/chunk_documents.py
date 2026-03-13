@@ -1,4 +1,4 @@
-def chunk_text(text: str, chunk_size=150, overlap=30):
+def chunk_text(text: str, chunk_size=400, overlap=60):
     chunks = []
     start = 0
     text_length = len(text)

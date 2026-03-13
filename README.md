@@ -26,7 +26,7 @@ No external LLM APIs required after initial model download.
 
 ## 🚀 Features
 
-* 📄 Document ingestion from local `.txt` and `.xlsx` files
+* 📄 Document ingestion from local `.txt`, `.xlsx` and `.pdf` files
 * ✂️ Intelligent document chunking
 * 🧠 Semantic embeddings using Sentence Transformers
 * 📦 FAISS vector similarity search
@@ -247,6 +247,7 @@ No runtime internet dependency.
 
 * `.txt`
 * `.xlsx`
+* `.pdf` ✨ **NEW**
 
 Add files to:
 

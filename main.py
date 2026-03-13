@@ -83,7 +83,7 @@ def main():
             break
 
         query_vector = embed_query(question)
-        results = store.search(query_vector, k=3)
+        results = store.search(query_vector, k=5)
 
         context = "\n\n".join(
             f"[Source: {r['document']['source']}]\n{r['document']['content']}"

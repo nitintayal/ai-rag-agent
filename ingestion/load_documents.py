@@ -1,5 +1,8 @@
-from pathlib import Path
 import pandas as pd
+import os
+from pathlib import Path
+import openpyxl
+from pypdf import PdfReader
 
 def load_text(folder_path: str):
     documents = []
@@ -13,7 +16,6 @@ def load_text(folder_path: str):
             })
     print(f"✅ Loaded {len(documents)} text documents from {folder}")
     return documents
-
 
 def load_xlsx(file_path):
     df = pd.read_excel(file_path)
@@ -33,13 +35,62 @@ def load_xlsx(file_path):
     print(f"✅ Loaded {len(chunks)} rows from {file_path}")
     return chunks
 
-def load_documents(folder_path: str):
+def load_documents(data_dir: str):
+    """
+    Load documents from data directory.
+    Supports: .txt, .xlsx, .pdf
+    """
     documents = []
-    folder = Path(folder_path)
-    documents = load_text(folder_path)
-    for file in folder.glob("*.xlsx"):
-        documents.extend(load_xlsx(file))
+    data_path = Path(data_dir)
 
-    print(f"✅ Loaded {len(documents)} documents from {folder}")
+    if not data_path.exists():
+        print(f"⚠️ Data directory '{data_dir}' not found. Creating...")
+        data_path.mkdir(parents=True, exist_ok=True)
+        return documents
+
+    # ---- Load .txt files ----
+    for txt_file in data_path.glob("*.txt"):
+        with open(txt_file, "r", encoding="utf-8") as f:
+            content = f.read()
+            documents.append({
+                "source": txt_file.name,
+                "content": content
+            })
+        print(f"✅ Loaded: {txt_file.name}")
+
+    # ---- Load .xlsx files ----
+    for xlsx_file in data_path.glob("*.xlsx"):
+        workbook = openpyxl.load_workbook(xlsx_file)
+        for sheet_name in workbook.sheetnames:
+            sheet = workbook[sheet_name]
+            content = "\n".join(
+                " | ".join(str(cell.value) for cell in row if cell.value)
+                for row in sheet.iter_rows()
+            )
+            documents.append({
+                "source": f"{xlsx_file.name}#{sheet_name}",
+                "content": content
+            })
+        print(f"✅ Loaded: {xlsx_file.name}")
+
+    # ---- Load .pdf files (NEW) ----
+    for pdf_file in data_path.glob("*.pdf"):
+        try:
+            with open(pdf_file, "rb") as f:
+                pdf_reader = PdfReader(f)
+                
+                # Extract text from all pages
+                full_text = ""
+                for page_num, page in enumerate(pdf_reader.pages):
+                    text = page.extract_text()
+                    full_text += f"\n[Page {page_num + 1}]\n{text}"
+                
+                documents.append({
+                    "source": pdf_file.name,
+                    "content": full_text
+                })
+            print(f"✅ Loaded: {pdf_file.name}")
+        except Exception as e:
+            print(f"❌ Error loading {pdf_file.name}: {e}")
+
     return documents
-
