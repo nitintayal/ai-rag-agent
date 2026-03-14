@@ -5,8 +5,18 @@ from embeddings.sentence_embeddings import embed_query
 from retrieval.vector_store import VectorStore
 from agent.local_llm_answer import answer_with_llm
 from agent.agent_executor import run_agent
-app = FastAPI(title="Local RAG API")
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+import asyncio
 
+app = FastAPI(title="Local RAG API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # Load vector store once at startup
 store = VectorStore.load("storage")
 
@@ -38,12 +48,23 @@ def ask_question(req: QuestionRequest):
 
 
 
+# @app.post("/ask")
+# def ask_question(req: QuestionRequest):
+
+#     answer = run_agent(req.question)
+
+#     return {"answer": answer}
+
+
 @app.post("/ask")
-def ask_question(req: QuestionRequest):
+async def ask_question(req: QuestionRequest):
 
-    answer = run_agent(req.question)
+    async def generate():
 
-    return {"answer": answer}
-# {
-#   "question": "How often should passwords be changed?"
-# }
+        answer = await asyncio.to_thread(run_agent, req.question)
+
+        for word in answer.split():
+            yield word + " "
+            await asyncio.sleep(0.02)
+
+    return StreamingResponse(generate(), media_type="text/plain")
