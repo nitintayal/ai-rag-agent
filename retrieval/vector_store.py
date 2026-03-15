@@ -51,3 +51,42 @@ class VectorStore:
             documents = pickle.load(f)
 
         return cls(index, documents)
+
+    def delete_by_source(self, source):
+
+        import numpy as np
+        import faiss
+
+        new_documents = []
+        new_vectors = []
+
+        for i, doc in enumerate(self.documents):
+
+            if doc["source"] != source:
+
+                new_documents.append(doc)
+
+                vector = self.index.reconstruct(i)
+
+                new_vectors.append(vector)
+
+        if not new_vectors:
+            print("No vectors left")
+
+            dim = self.index.d
+            self.index = faiss.IndexFlatL2(dim)
+
+            self.documents = []
+
+            return
+
+        vectors_np = np.array(new_vectors).astype("float32")
+
+        dim = vectors_np.shape[1]
+
+        new_index = faiss.IndexFlatL2(dim)
+
+        new_index.add(vectors_np)
+
+        self.index = new_index
+        self.documents = new_documents
