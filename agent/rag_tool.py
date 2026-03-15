@@ -12,4 +12,6 @@ def search_documents(query: str):
         r["document"]["content"] for r in results
     )
 
-    return context
+    sources = [r["document"]["source"] for r in results]
+
+    return context, sources

@@ -12,10 +12,11 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 def answer_with_llm(question: str, context: str) -> str:
+    print("Generating answer with LLM with Context:", context)
     prompt = f"""
 You are a helpful assistant. OUTPUT ONLY THE ANSWER without any additional text.
 Answer the question briefly in a single liner using only the context provided below without any additional justification and output only the answer.
-Answer ONLY in the given context." .
+Answer ONLY in the given context.
 Context:{context}
 
 Question:{question}

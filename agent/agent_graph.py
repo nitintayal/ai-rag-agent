@@ -12,6 +12,7 @@ class AgentState(TypedDict):
     question: str
     context: str
     answer: str
+    sources: list[str]
 
 
 # ===============================
@@ -19,10 +20,11 @@ class AgentState(TypedDict):
 # ===============================
 def retrieve(state: AgentState):
 
-    context = search_documents(state["question"])
+    context, sources = search_documents(state["question"])
 
     return {
-        "context": context
+        "context": context,
+        "sources": sources
     }
 
 
@@ -30,6 +32,8 @@ def retrieve(state: AgentState):
 # Generation Node
 # ===============================
 def generate(state: AgentState):
+    if not state['context']:
+        return {"answer": "I don't have any relevant information to answer that question.", "sources": []}
 
     prompt = f"""
     Answer using ONLY the provided context.
@@ -44,7 +48,8 @@ def generate(state: AgentState):
     answer = answer_with_llm(state["question"], state["context"])
 
     return {
-        "answer": answer
+        "answer": answer,
+        "sources": state.get("sources", [])
     }
 
 

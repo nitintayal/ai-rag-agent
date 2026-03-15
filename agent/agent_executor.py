@@ -7,4 +7,4 @@ def run_agent(question: str):
         "question": question
     })
 
-    return result["answer"]
+    return result
