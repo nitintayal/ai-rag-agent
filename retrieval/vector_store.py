@@ -143,11 +143,11 @@ class VectorStore:
         combined = {}
 
         for i, r in enumerate(vector_results):
-            key = r["doc"]["content"]
+            key = r["doc"]["chunk_id"]
             combined[key] = 0.7 * vec_scores[i]
 
         for i, r in enumerate(bm25_results):
-            key = r["doc"]["content"]
+            key = r["doc"]["chunk_id"]
             combined[key] = combined.get(key, 0) + 0.3 * bm_scores[i]
 
         # 5️⃣ Sort results
@@ -156,7 +156,7 @@ class VectorStore:
         # 6️⃣ Return top-k documents
         results = []
         for content, score in sorted_docs[:k]:
-            doc = next(d for d in self.documents if d["content"] == content)
+            doc = next(d for d in self.documents if d["chunk_id"] == content)
             results.append({
                 "document": doc,
                 "score": score

@@ -12,7 +12,7 @@ def chunk_documents(documents, chunk_size=400, overlap=80):
         tokens = enc.encode(text)
 
         start = 0
-
+        chunk_idx = 0
         while start < len(tokens):
 
             end = start + chunk_size
@@ -23,9 +23,11 @@ def chunk_documents(documents, chunk_size=400, overlap=80):
 
             chunks.append({
                 "content": chunk_text,
-                "source": doc["source"]
+                "source": doc["source"],
+                "chunk_id": f"{doc['source']}_{chunk_idx}"
             })
 
             start += chunk_size - overlap
+            chunk_idx += 1
 
     return chunks

@@ -324,10 +324,6 @@ MIT
 
 ## Next
 
-* Ui -> Agent is typing... ✅
-* Hybrid Search (Vector search + Keyword search (BM25))✅
-* Cross-encoder re-ranking
-* Chunk Optimization (chunk size: 300–500 tokens overlap: 50–100)
 * Confidence Score In API response
 * Tool routing (LangGraph strength) User query -> Decision node -> RAG / Tool / LLM
 * Show uploaded documents in UI
