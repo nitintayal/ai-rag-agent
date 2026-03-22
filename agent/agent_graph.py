@@ -1,7 +1,7 @@
 from typing import TypedDict
 from langgraph.graph import StateGraph, END
 
-from agent.rag_tool import search_documents
+from agent.rag_tool import hybrid_search_documents
 from agent.local_llm_answer import answer_with_llm
 
 
@@ -20,7 +20,7 @@ class AgentState(TypedDict):
 # ===============================
 def retrieve(state: AgentState):
 
-    context, sources = search_documents(state["question"])
+    context, sources = hybrid_search_documents(state["question"])
 
     return {
         "context": context,

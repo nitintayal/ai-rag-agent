@@ -236,3 +236,5 @@ __pycache__/
 
 
 .vscode/launch.json
+data/
+storage/

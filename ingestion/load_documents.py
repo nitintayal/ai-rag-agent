@@ -105,10 +105,10 @@ def load_single_file(file_path: str):
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
             print(f"✅ Loaded: {file_path.name}")
-            return {
+            return [{
                 "source": file_path.name,
                 "content": content
-            }
+            }]
     elif file_path.suffix == ".xlsx":
         workbook = openpyxl.load_workbook(file_path)
         sheet = workbook.active
@@ -117,10 +117,10 @@ def load_single_file(file_path: str):
             for row in sheet.iter_rows()
         )
         print(f"✅ Loaded: {file_path.name}")
-        return {
+        return [{
             "source": file_path.name,
             "content": content
-        }
+        }]
     elif file_path.suffix == ".pdf":
         try:
             with open(file_path, "rb") as f:
@@ -130,10 +130,10 @@ def load_single_file(file_path: str):
                     text = page.extract_text()
                     full_text += f"\n[Page {page_num + 1}]\n{text}"
                 print(f"✅ Loaded: {file_path.name}")
-                return {
+                return [{
                     "source": file_path.name,
                     "content": full_text
-                }
+                }]
         except Exception as e:
             print(f"❌ Error loading {file_path.name}: {e}")
             return None

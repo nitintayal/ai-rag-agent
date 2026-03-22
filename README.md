@@ -1,136 +1,166 @@
-# ai-rag-agent
+# 🧠 AI RAG Agent (Agentic + Hybrid Search + Re-Ranking)
 
-🧠 **Agentic AI RAG System — Local, Offline & Dockerized**
+🚀 **Production-grade Agentic Retrieval-Augmented Generation (RAG) system** with:
 
-An **Agentic Retrieval-Augmented Generation (RAG)** system built using **Python, FAISS, Sentence Transformers, LangGraph, FastAPI, and Docker**.
-
-This project enables intelligent question answering over your own documents using a **local AI agent workflow**, persistent vector storage, offline inference, and containerized deployment.
-
----
-
-# 🤖 Agentic Local RAG System
-
-Unlike traditional RAG pipelines, this system introduces an **AI Agent layer** powered by **LangGraph**, enabling structured reasoning and tool execution.
-
-The agent dynamically executes workflow steps such as:
-
-✅ Retrieve knowledge
-✅ Process context
-✅ Generate grounded responses
-
-All running **fully locally**.
-
-No external LLM APIs required after initial model download.
+* 🤖 LangGraph-powered agent workflow
+* 🔍 Hybrid search (FAISS + BM25)
+* 🧠 Cross-encoder re-ranking (MS MARCO)
+* ⚡ Streaming responses (ChatGPT-style UI ready)
+* 📦 Fully Dockerized & Offline-capable
 
 ---
 
-## 🚀 Features
+# ✨ What Makes This Special
 
-* 📄 Document ingestion from local `.txt`, `.xlsx` and `.pdf` files
-* ✂️ Intelligent document chunking
-* 🧠 Semantic embeddings using Sentence Transformers
-* 📦 FAISS vector similarity search
-* 💾 Persistent disk-backed vector database
-* 🔄 Incremental ingestion (only new documents embedded)
-* 🤖 **LangGraph Agent Workflow**
-* 🧰 RAG converted into Agent Tool
-* 🌐 FastAPI REST API
-* 📚 Source-aware grounded answers
-* 📊 Confidence scoring
-* 🐳 Docker & Docker Compose deployment
-* 🔐 Fully offline inference support
+This is **not just a RAG system** — it is an **Agentic AI system** where:
+
+* RAG is implemented as a **tool**
+* A **LangGraph agent** decides how to use it
+* Retrieval is enhanced with **Hybrid Search + Re-ranking**
+
+👉 This mirrors **real-world production AI systems** (Perplexity, OpenAI Retrieval, enterprise RAG).
 
 ---
 
-## 🧠 Agent Architecture Overview
+# 🚀 Features
 
-```
-User Question
-      ↓
+## 🧠 Retrieval Intelligence
+
+* ✅ Semantic Search (FAISS)
+* ✅ Keyword Search (BM25)
+* ✅ **Hybrid Search (Vector + Keyword)**
+* ✅ **Cross-Encoder Re-ranking (MS MARCO)**
+* ✅ Top-K context filtering
+* ✅ Token-based chunking (with overlap)
+
+---
+
+## 🤖 Agent Capabilities
+
+* LangGraph-based workflow
+* RAG exposed as tool
+* Extensible multi-tool architecture
+* Deterministic reasoning flow
+
+---
+
+## 📄 Document Handling
+
+* `.txt`, `.xlsx`, `.pdf`
+* Incremental ingestion (only new docs)
+* Delete documents from knowledge base
+* Persistent FAISS index
+
+---
+
+## 🌐 API Layer
+
+* FastAPI backend
+* Streaming responses (`/ask`)
+* File upload (`/upload`)
+* Delete endpoint (`/delete`)
+* CORS-enabled
+
+---
+
+## 💻 Frontend Ready
+
+* ChatGPT-style streaming UI
+* Typing indicator support
+* Source attribution
+* Real-time updates
+
+---
+
+## 🐳 DevOps & Deployment
+
+* Docker + Docker Compose
+* Persistent vector storage
+* HuggingFace cache mounting
+* Offline inference ready
+
+---
+
+# 🧠 Architecture Overview
+
+```id="arch1"
+User Query
+   ↓
 FastAPI API
-      ↓
-Agent Executor
-      ↓
+   ↓
 LangGraph Agent
-      ↓
-RAG Tool (Knowledge Retrieval)
-      ↓
-FAISS Vector Store
-      ↓
+   ↓
+RAG Tool
+   ↓
+Hybrid Retrieval
+   (FAISS + BM25)
+   ↓
+Cross-Encoder Re-ranking
+   ↓
+Top-K Context
+   ↓
 Local LLM
-      ↓
-Answer + Sources + Confidence
+   ↓
+Streaming Answer + Sources
 ```
 
 ---
 
-## ⚙️ Agent Workflow (LangGraph)
+# ⚙️ Agent Workflow
 
-The AI agent executes a structured workflow:
-
-```
-retrieve → generate → END
+```id="workflow1"
+retrieve → rerank → generate → END
 ```
 
-### Agent Nodes
-
-| Node     | Responsibility           |
-| -------- | ------------------------ |
-| Retrieve | Searches knowledge base  |
-| Generate | Produces grounded answer |
-| End      | Returns final response   |
-
-This enables extensibility toward multi-tool autonomous agents.
+| Node     | Description                   |
+| -------- | ----------------------------- |
+| Retrieve | Hybrid search (vector + BM25) |
+| Rerank   | Cross-encoder scoring         |
+| Generate | LLM grounded response         |
+| End      | Final output                  |
 
 ---
 
-## 🛠 Tech Stack
+# 📂 Project Structure
 
-* **Python 3.11+**
-* **LangGraph**
-* **Sentence Transformers**
-* **FAISS**
-* **HuggingFace Transformers**
-* **FastAPI**
-* **Torch / NumPy**
-* **Docker**
-* **Docker Compose**
-
----
-
-## 📂 Project Structure
-
-```
+```id="structure1"
 ai-rag-agent/
+│
 ├── agent/
-│   ├── __init__.py
 │   ├── rag_tool.py
 │   ├── agent_graph.py
 │   ├── agent_executor.py
 │   └── local_llm_answer.py
 │
-├── embeddings/
 ├── ingestion/
+│   ├── load_documents.py
+│   ├── chunk_documents.py
+│   └── ingest_documents.py
+│
+├── embeddings/
 ├── retrieval/
+│   └── vector_store.py
+│
+├── reranker/
+│   └── cross_encoder.py
 │
 ├── data/
 ├── storage/
 │   ├── faiss.index
 │   └── documents.pkl
 │
-├── main.py
 ├── api.py
-├── Dockerfile
-├── docker-compose.yml
+├── main.py
 ├── requirements.txt
+├── docker-compose.yml
 └── README.md
 ```
 
 ---
 
-# ▶️ Local Execution (CLI Mode)
+# ▶️ Local Setup
 
-## 1️⃣ Create Virtual Environment
+## 1️⃣ Create environment
 
 ```bash
 python3 -m venv venv
@@ -139,7 +169,7 @@ source venv/bin/activate
 
 ---
 
-## 2️⃣ Install Dependencies
+## 2️⃣ Install dependencies
 
 ```bash
 pip install -r requirements.txt
@@ -147,23 +177,23 @@ pip install -r requirements.txt
 
 ---
 
-## 3️⃣ Build Vector Index
+## 3️⃣ Ingest documents
 
 ```bash
 python main.py
 ```
 
-Processes documents and builds FAISS index.
-
 ---
 
-## 4️⃣ Run FastAPI Server
+## 4️⃣ Run API
 
 ```bash
 uvicorn api:app --reload --port 8000
 ```
 
-Open:
+---
+
+## 5️⃣ Open Swagger
 
 ```
 http://localhost:8000/docs
@@ -173,158 +203,139 @@ http://localhost:8000/docs
 
 # 🐳 Docker Setup
 
-## Build Image
-
 ```bash
-docker build -t ai-rag-agent .
-```
-
----
-
-## Run Container
-
-```bash
-docker run --rm \
--p 8000:8000 \
--v $(pwd)/storage:/app/storage \
--v ~/.cache/huggingface:/root/.cache/huggingface \
-ai-rag-agent
-```
-
----
-
-## ✅ Persistent Volumes
-
-| Volume     | Purpose             |
-| ---------- | ------------------- |
-| storage    | FAISS persistence   |
-| HF cache   | Offline models      |
-| Host mount | Stateless container |
-
----
-
-# 🐳 Docker Compose (Recommended)
-
-Start:
-
-```bash
-docker compose up
-```
-
-Background:
-
-```bash
-docker compose up -d
-```
-
-Stop:
-
-```bash
-docker compose down
+docker compose up --build
 ```
 
 ---
 
 # 🔐 Offline Mode
 
-After first download:
-
-```
-HF_HUB_OFFLINE=1
-```
-
-Mounted cache:
-
-```
-~/.cache/huggingface → container
-```
-
-No runtime internet dependency.
-
----
-
-## 📄 Supported Documents
-
-* `.txt`
-* `.xlsx`
-* `.pdf` ✨ **NEW**
-
-Add files to:
-
-```
-data/
-```
-
-Re-run ingestion:
+After first model download:
 
 ```bash
-python main.py
+export HF_HUB_OFFLINE=1
+```
+
+Cache mounted from:
+
+```
+~/.cache/huggingface
 ```
 
 ---
 
-## 🌐 API Usage
+# 🌐 API Usage
 
-### Endpoint
-
-```
-POST /ask
-```
-
-### Request
+## POST `/ask`
 
 ```json
 {
-  "question": "What employee data exists?"
+  "question": "What is leave policy?"
 }
 ```
 
-### Response
+### Streaming Response
 
-```json
-{
-  "answer": "...",
-  "confidence": 0.87,
-  "sources": ["employee.xlsx"]
-}
+```
+Answer text...
+
+Sources:
+- employee_policy.pdf
+- leave_rules.xlsx
 ```
 
 ---
 
-## 🧠 Design Principles
+## POST `/upload`
+
+Upload document via form-data.
+
+---
+
+## DELETE `/delete`
+
+```
+/delete?source=employee.xlsx
+```
+
+---
+
+# ⚡ Key Innovations
+
+* Hybrid Retrieval (FAISS + BM25)
+* Cross-Encoder Re-ranking
+* Token-based chunking with overlap
+* Streaming LLM responses
+* Agent-based orchestration
+* Incremental indexing pipeline
+
+---
+
+# 📈 Why Hybrid + Re-ranking Matters
+
+| Approach     | Result                     |
+| ------------ | -------------------------- |
+| Vector only  | misses keywords ❌          |
+| BM25 only    | misses semantics ❌         |
+| Hybrid       | balanced retrieval ✅       |
+| + Re-ranking | highly accurate context 🚀 |
+
+---
+
+# 🧠 Design Principles
 
 * Stateless containers
-* Persistent vector storage
-* Tool-based agent architecture
-* Offline-first AI deployment
-* Reproducible environments
+* Persistent knowledge store
+* Agent-driven orchestration
+* Offline-first ML deployment
+* Modular architecture
 
 ---
 
-## 💼 Skills Demonstrated
+# 💼 Skills Demonstrated
 
-* Agentic RAG Architecture
-* LangGraph Workflow Design
-* Tool-based AI Systems
-* Vector Databases (FAISS)
-* FastAPI Backend Engineering
-* Dockerized AI Deployment
-* Offline LLM Inference
-* Production-ready AI Infrastructure
+* Agentic AI Systems (LangGraph)
+* Retrieval-Augmented Generation (RAG)
+* Hybrid Search (Vector + BM25)
+* Re-ranking (Cross-Encoder Models)
+* FastAPI + Streaming APIs
+* React-ready real-time UI
+* Dockerized AI deployment
+* Offline AI inference
 
 ---
 
-## 🚀 Future Enhancements
+# 🚀 Future Enhancements
 
-* ReAct decision agent
-* Multi-tool routing
+* ReAct-style decision agents
+* Multi-tool agent routing
 * Conversation memory
 * Redis caching
-* Streaming responses
+* Perplexity-style citations (highlight chunks)
 * Kubernetes deployment
 
 ---
 
-## 📜 License
+# 📜 License
 
 MIT
+
+
+## Next
+
+* Ui -> Agent is typing... ✅
+* Hybrid Search (Vector search + Keyword search (BM25))✅
+* Cross-encoder re-ranking
+* Chunk Optimization (chunk size: 300–500 tokens overlap: 50–100)
+* Confidence Score In API response
+* Tool routing (LangGraph strength) User query -> Decision node -> RAG / Tool / LLM
+* Show uploaded documents in UI
+* ReIndex Button (Upload → Index manually)
+* Performance & Scaling (Redis / in-memory cache) [question → answer]
+* Background ingestion (upload → queue → worker → index)
+* Environmental Configs (.env, MODEL_NAME=, TOP_K= ,CHUNK_SIZE= )
+* Upload from UI → instant query Already close — just polish UX.
+* Multi-user support (session id, chat id)
+* Multi-tool agent with LangGraph
+

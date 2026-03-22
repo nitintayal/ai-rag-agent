@@ -1,5 +1,5 @@
 from ingestion.load_documents import load_documents, load_single_file
-from ingestion.chunk_documents import chunk_text
+from ingestion.chunk_documents import chunk_documents
 from embeddings.sentence_embeddings import embed_texts
 from retrieval.vector_store import VectorStore
 
@@ -13,11 +13,10 @@ def ingest_documents(single_file=None):
     print(f"Loaded {len(doc)} documents")
 
     print("✂️ Chunking documents...")
-
     chunks = []
-    for chunk in chunk_text(doc["content"]):
+    for chunk in chunk_documents(doc):
         chunks.append({
-            "source": str(doc["source"]),
+            "source": str(chunk["source"]),
             "content": chunk
         })
 
@@ -35,7 +34,7 @@ def ingest_documents(single_file=None):
     store = VectorStore.load()
 
     store.add(embeddings, chunks)
-
+    store.build_bm25()
     store.save()
 
     print("✅ Ingestion complete")

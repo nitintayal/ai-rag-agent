@@ -1,8 +1,10 @@
 import faiss
+from langchain_core import documents
 import numpy as np
 import pickle
 from pathlib import Path
-
+from rank_bm25 import BM25Okapi
+import re
 
 class VectorStore:
     def __init__(self, index=None, documents=None):
@@ -13,6 +15,9 @@ class VectorStore:
         self.index.add(np.array(vectors).astype("float32"))
         self.documents.extend(documents)
 
+    def tokenize(self, text):
+        return re.findall(r"\w+", text.lower())
+
     @classmethod
     def from_vectors(cls, vectors, documents):
         dim = len(vectors[0])
@@ -21,6 +26,7 @@ class VectorStore:
         return cls(index, documents)
 
     def search(self, query_vector, k=3):
+        
         distances, indices = self.index.search(
             np.array([query_vector]).astype("float32"), k
         )
@@ -50,7 +56,10 @@ class VectorStore:
         with open(f"{folder_path}/documents.pkl", "rb") as f:
             documents = pickle.load(f)
 
-        return cls(index, documents)
+        store = cls(index, documents)
+        store.build_bm25()
+
+        return store
 
     def delete_by_source(self, source):
 
@@ -90,3 +99,67 @@ class VectorStore:
 
         self.index = new_index
         self.documents = new_documents
+
+    def build_bm25(self):
+
+        self.corpus = [doc["content"] for doc in self.documents]
+        tokenized_corpus = [self.tokenize(text) for text in self.corpus]
+        self.bm25 = BM25Okapi(tokenized_corpus)
+
+    def hybrid_search(self, query, query_vector, k=5):
+
+        import numpy as np
+
+        # 1️⃣ Vector search
+        D, I = self.index.search(np.array([query_vector]).astype("float32"), k)
+
+        vector_results = []
+        for idx, score in zip(I[0], D[0]):
+            vector_results.append({
+                "doc": self.documents[idx],
+                "score": 1 / (1 + score)   # convert distance → similarity
+            })
+
+        # 2️⃣ BM25 search
+        tokenized_query = self.tokenize(query)
+        bm25_scores = self.bm25.get_scores(tokenized_query)
+
+        bm25_results = []
+        for i, score in enumerate(bm25_scores):
+            bm25_results.append({
+                "doc": self.documents[i],
+                "score": score
+            })
+
+        # 3️⃣ Normalize scores
+        def normalize(scores):
+            max_score = max(scores) if scores else 1
+            return [s / max_score for s in scores]
+
+        vec_scores = normalize([r["score"] for r in vector_results])
+        bm_scores = normalize([r["score"] for r in bm25_results])
+
+        # 4️⃣ Combine scores
+        combined = {}
+
+        for i, r in enumerate(vector_results):
+            key = r["doc"]["content"]
+            combined[key] = 0.7 * vec_scores[i]
+
+        for i, r in enumerate(bm25_results):
+            key = r["doc"]["content"]
+            combined[key] = combined.get(key, 0) + 0.3 * bm_scores[i]
+
+        # 5️⃣ Sort results
+        sorted_docs = sorted(combined.items(), key=lambda x: x[1], reverse=True)
+
+        # 6️⃣ Return top-k documents
+        results = []
+        for content, score in sorted_docs[:k]:
+            doc = next(d for d in self.documents if d["content"] == content)
+            results.append({
+                "document": doc,
+                "score": score
+            })
+
+        return results

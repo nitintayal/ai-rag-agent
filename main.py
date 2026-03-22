@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 
 from ingestion.load_documents import load_documents
-from ingestion.chunk_documents import chunk_text
+from ingestion.chunk_documents import chunk_documents
 from embeddings.sentence_embeddings import embed_texts, embed_query
 from retrieval.vector_store import VectorStore
 from pathlib import Path
@@ -16,13 +16,8 @@ def main():
 
     # ---- Chunk documents ----
     print("✂️ Chunking documents...")
-    chunks = []
-    for doc in documents:
-        for chunk in chunk_text(doc["content"]):
-            chunks.append({
-                "source": str(doc["source"]),
-                "content": chunk
-            })
+    
+    chunks = chunk_documents(documents)
 
     texts = [c["content"] for c in chunks]
 
