@@ -5,6 +5,7 @@ import pickle
 from pathlib import Path
 from rank_bm25 import BM25Okapi
 import re
+from configs.config import settings
 
 class VectorStore:
     def __init__(self, index=None, documents=None):
@@ -144,11 +145,11 @@ class VectorStore:
 
         for i, r in enumerate(vector_results):
             key = r["doc"]["chunk_id"]
-            combined[key] = 0.7 * vec_scores[i]
+            combined[key] = settings.VECTOR_WEIGHT * vec_scores[i]
 
         for i, r in enumerate(bm25_results):
             key = r["doc"]["chunk_id"]
-            combined[key] = combined.get(key, 0) + 0.3 * bm_scores[i]
+            combined[key] = combined.get(key, 0) + settings.BM25_WEIGHT * bm_scores[i]
 
         # 5️⃣ Sort results
         sorted_docs = sorted(combined.items(), key=lambda x: x[1], reverse=True)

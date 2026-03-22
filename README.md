@@ -330,7 +330,6 @@ MIT
 * ReIndex Button (Upload → Index manually)
 * Performance & Scaling (Redis / in-memory cache) [question → answer]
 * Background ingestion (upload → queue → worker → index)
-* Environmental Configs (.env, MODEL_NAME=, TOP_K= ,CHUNK_SIZE= )
 * Upload from UI → instant query Already close — just polish UX.
 * Multi-user support (session id, chat id)
 * Multi-tool agent with LangGraph

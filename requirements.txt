@@ -44,6 +44,7 @@ tiktoken>=0.6.0
 python-dotenv>=1.0
 tqdm>=4.66
 typing-extensions>=4.9
+pydantic-settings>=2.2
 
 # Agent Framework
 langgraph>=0.2

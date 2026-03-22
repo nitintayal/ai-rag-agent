@@ -1,7 +1,8 @@
 from sentence_transformers import SentenceTransformer
+from configs.config import settings
 
 _model = SentenceTransformer(
-    "all-MiniLM-L6-v2"
+    settings.EMBEDDING_MODEL
 )
 
 def embed_texts(texts):

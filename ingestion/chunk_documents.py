@@ -1,6 +1,12 @@
 import tiktoken
+from configs.config import settings
 
-def chunk_documents(documents, chunk_size=400, overlap=80):
+def chunk_documents(documents, chunk_size=None, overlap=None):
+
+    if chunk_size is None:
+        chunk_size = settings.CHUNK_SIZE
+    if overlap is None:
+        overlap = settings.CHUNK_OVERLAP
 
     enc = tiktoken.get_encoding("cl100k_base")
 

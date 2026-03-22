@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-
+from configs.config import settings
 from embeddings.sentence_embeddings import embed_query
 from retrieval.vector_store import VectorStore
 from agent.local_llm_answer import answer_with_llm
@@ -62,7 +62,7 @@ async def ask_question(req: QuestionRequest):
 
         for word in result["answer"].split():
             yield word + " "
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(settings.STREAMING_DELAY)
         
         # send sources as final JSON block
         yield "\n\n SOURCES :\n"
