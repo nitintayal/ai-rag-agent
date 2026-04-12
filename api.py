@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from configs.config import settings
 from embeddings.sentence_embeddings import embed_query
@@ -13,8 +13,15 @@ import shutil
 from pathlib import Path
 from ingestion.ingest_documents import ingest_documents
 import json
+from journal.schemas import (
+    JournalEntryCreate,
+    JournalEntryResponse,
+    JournalSearchRequest,
+    JournalSearchResult,
+)
+from journal.store import JournalStore
 
-DATA_FOLDER = Path("data")
+DATA_FOLDER = Path(settings.DATA_DIR)
 
 app = FastAPI(title="Local RAG API")
 app.add_middleware(
@@ -25,10 +32,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 # Load vector store once at startup
-store = VectorStore.load("storage")
+store = VectorStore.load(settings.STORAGE_DIR)
+journal_store = JournalStore(settings.JOURNAL_DATABASE_URL)
 
 class QuestionRequest(BaseModel):
     question: str
+
 
 @app.post("/ask-old")
 def ask_question(req: QuestionRequest):
@@ -62,11 +71,12 @@ async def ask_question(req: QuestionRequest):
 
         for word in result["answer"].split():
             yield word + " "
-            await asyncio.sleep(settings.STREAMING_DELAY)
+            await asyncio.sleep(settings.STREAM_DELAY)
         
-        # send sources as final JSON block
+        sources = result.get("sources") or []
+
         yield "\n\n SOURCES :\n"
-        yield json.dumps(result["sources"])
+        yield json.dumps(sources)
 
     return StreamingResponse(generate(), media_type="text/plain")
 
@@ -85,17 +95,57 @@ async def upload_file(file: UploadFile = File(...)):
 @app.delete("/delete")
 def delete_file(source: str):
 
-    from pathlib import Path
-
-    store = VectorStore.load()
+    store = VectorStore.load(settings.STORAGE_DIR)
 
     store.delete_by_source(source)
 
-    store.save()
+    store.save(settings.STORAGE_DIR)
 
-    file_path = Path("data") / source
+    file_path = DATA_FOLDER / source
 
     if file_path.exists():
         file_path.unlink()
 
     return {"message": f"{source} removed successfully"}
+
+
+@app.post("/journal/entries", response_model=JournalEntryResponse)
+def create_journal_entry(payload: JournalEntryCreate):
+    entry = journal_store.add_entry(payload)
+    return entry
+
+
+@app.get("/journal/entries", response_model=list[JournalEntryResponse])
+def list_journal_entries(
+    user_id: str = Query(..., min_length=1),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    return journal_store.list_entries(user_id=user_id, limit=limit, offset=offset)
+
+
+@app.get("/journal/entries/{entry_id}", response_model=JournalEntryResponse)
+def get_journal_entry(entry_id: str, user_id: str = Query(..., min_length=1)):
+    entry = journal_store.get_entry(entry_id=entry_id, user_id=user_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Journal entry not found")
+    return entry
+
+
+@app.delete("/journal/entries/{entry_id}")
+def delete_journal_entry(entry_id: str, user_id: str = Query(..., min_length=1)):
+    deleted = journal_store.delete_entry(entry_id=entry_id, user_id=user_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Journal entry not found")
+
+    return {"message": f"Journal entry {entry_id} removed successfully"}
+
+
+@app.post("/journal/search", response_model=list[JournalSearchResult])
+def search_journal_entries(payload: JournalSearchRequest):
+    results = journal_store.search_entries(
+        user_id=payload.user_id,
+        query=payload.query,
+        k=payload.k,
+    )
+    return results

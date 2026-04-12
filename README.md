@@ -1,336 +1,268 @@
-# 🧠 AI RAG Agent (Agentic + Hybrid Search + Re-Ranking)
+# AI RAG Agent
 
-🚀 **Production-grade Agentic Retrieval-Augmented Generation (RAG) system** with:
+Agentic RAG system built with FastAPI, LangGraph, hybrid retrieval, local Hugging Face generation, optional structured-output routing, and a PostgreSQL-backed journal memory API.
 
-* 🤖 LangGraph-powered agent workflow
-* 🔍 Hybrid search (FAISS + BM25)
-* 🧠 Cross-encoder re-ranking (MS MARCO)
-* ⚡ Streaming responses (ChatGPT-style UI ready)
-* 📦 Fully Dockerized & Offline-capable
+## What It Does
 
----
+- Answers questions from your local knowledge base with hybrid retrieval.
+- Routes time-sensitive or external queries to web search.
+- Streams answers and source lists from the `/ask` endpoint.
+- Supports document upload, ingestion, and deletion.
+- Stores personal journal entries in PostgreSQL and supports semantic journal search.
 
-# ✨ What Makes This Special
+## Core Features
 
-This is **not just a RAG system** — it is an **Agentic AI system** where:
+- LangGraph agent with `decide -> rag|web -> generate`
+- Hybrid search using FAISS + BM25
+- Cross-encoder reranking
+- Local answer generation with Hugging Face models
+- Optional structured router using Gemini JSON/schema output
+- Web search with source URL capture
+- Journal CRUD + semantic search
+- Docker Compose setup with API + Postgres
 
-* RAG is implemented as a **tool**
-* A **LangGraph agent** decides how to use it
-* Retrieval is enhanced with **Hybrid Search + Re-ranking**
+## Architecture
 
-👉 This mirrors **real-world production AI systems** (Perplexity, OpenAI Retrieval, enterprise RAG).
-
----
-
-# 🚀 Features
-
-## 🧠 Retrieval Intelligence
-
-* ✅ Semantic Search (FAISS)
-* ✅ Keyword Search (BM25)
-* ✅ **Hybrid Search (Vector + Keyword)**
-* ✅ **Cross-Encoder Re-ranking (MS MARCO)**
-* ✅ Top-K context filtering
-* ✅ Token-based chunking (with overlap)
-
----
-
-## 🤖 Agent Capabilities
-
-* LangGraph-based workflow
-* RAG exposed as tool
-* Extensible multi-tool architecture
-* Deterministic reasoning flow
-
----
-
-## 📄 Document Handling
-
-* `.txt`, `.xlsx`, `.pdf`
-* Incremental ingestion (only new docs)
-* Delete documents from knowledge base
-* Persistent FAISS index
-
----
-
-## 🌐 API Layer
-
-* FastAPI backend
-* Streaming responses (`/ask`)
-* File upload (`/upload`)
-* Delete endpoint (`/delete`)
-* CORS-enabled
-
----
-
-## 💻 Frontend Ready
-
-* ChatGPT-style streaming UI
-* Typing indicator support
-* Source attribution
-* Real-time updates
-
----
-
-## 🐳 DevOps & Deployment
-
-* Docker + Docker Compose
-* Persistent vector storage
-* HuggingFace cache mounting
-* Offline inference ready
-
----
-
-# 🧠 Architecture Overview
-
-```id="arch1"
-User Query
-   ↓
-FastAPI API
-   ↓
-LangGraph Agent
-   ↓
-RAG Tool
-   ↓
-Hybrid Retrieval
-   (FAISS + BM25)
-   ↓
-Cross-Encoder Re-ranking
-   ↓
-Top-K Context
-   ↓
-Local LLM
-   ↓
-Streaming Answer + Sources
+```text
+User Question
+  -> FastAPI
+  -> LangGraph Agent
+     -> Decide Tool
+        -> RAG Tool
+        -> Web Tool
+  -> Answer Generation
+  -> Streamed Answer + Sources
 ```
 
----
+## Request Flow
 
-# ⚙️ Agent Workflow
+### RAG path
 
-```id="workflow1"
-retrieve → rerank → generate → END
-```
+1. Query is embedded.
+2. Hybrid retrieval runs across vector + BM25 search.
+3. Results are reranked.
+4. Top documents become context.
+5. Local LLM generates the grounded answer.
 
-| Node     | Description                   |
-| -------- | ----------------------------- |
-| Retrieve | Hybrid search (vector + BM25) |
-| Rerank   | Cross-encoder scoring         |
-| Generate | LLM grounded response         |
-| End      | Final output                  |
+### Web path
 
----
+1. Router selects `web`.
+2. DDGS fetches search results.
+3. Titles, URLs, and snippets are converted into context.
+4. The answer model responds using that web context.
+5. Source URLs are streamed back as a normal serialized list.
 
-# 📂 Project Structure
+## Project Structure
 
-```id="structure1"
+```text
 ai-rag-agent/
-│
 ├── agent/
-│   ├── rag_tool.py
-│   ├── agent_graph.py
 │   ├── agent_executor.py
-│   └── local_llm_answer.py
-│
-├── ingestion/
-│   ├── load_documents.py
-│   ├── chunk_documents.py
-│   └── ingest_documents.py
-│
+│   ├── agent_graph.py
+│   ├── agent_state.py
+│   ├── local_llm_answer.py
+│   ├── rag_tool.py
+│   ├── router.py
+│   └── web_tool.py
+├── configs/
+│   └── config.py
 ├── embeddings/
+├── ingestion/
+├── journal/
+│   ├── schemas.py
+│   └── store.py
 ├── retrieval/
-│   └── vector_store.py
-│
-├── reranker/
-│   └── cross_encoder.py
-│
-├── data/
-├── storage/
-│   ├── faiss.index
-│   └── documents.pkl
-│
 ├── api.py
-├── main.py
-├── requirements.txt
 ├── docker-compose.yml
-└── README.md
+├── main.py
+└── requirements.txt
 ```
 
----
+## Setup
 
-# ▶️ Local Setup
-
-## 1️⃣ Create environment
+### 1. Create a virtual environment
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
 
----
-
-## 2️⃣ Install dependencies
+### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
----
+### 3. Configure environment
 
-## 3️⃣ Ingest documents
+Create `.env` from `.env.example` and set the required values.
 
-```bash
-python main.py
+Key variables:
+
+```env
+EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+RERANK_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
+LLM_MODEL=Qwen/Qwen2-1.5B-Instruct
+
+ROUTER_PROVIDER=local
+ROUTER_MODEL=gemini-2.5-flash-lite
+GOOGLE_API_KEY=
+WEB_SEARCH_MAX_RESULTS=3
+
+DATA_DIR=data
+STORAGE_DIR=storage
+JOURNAL_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/journal_db
 ```
 
----
+Notes:
 
-## 4️⃣ Run API
+- Use `ROUTER_PROVIDER=local` to keep routing fully local.
+- Use `ROUTER_PROVIDER=gemini` to enable schema-constrained routing with Gemini.
+- `GOOGLE_API_KEY` is required only for the Gemini router path.
+
+### 4. Ingest documents
+
+```bash
+python3 main.py
+```
+
+### 5. Run the API
 
 ```bash
 uvicorn api:app --reload --port 8000
 ```
 
----
+Open docs at [http://localhost:8000/docs](http://localhost:8000/docs).
 
-## 5️⃣ Open Swagger
+## Docker
 
-```
-http://localhost:8000/docs
-```
-
----
-
-# 🐳 Docker Setup
+Run the API and PostgreSQL together:
 
 ```bash
 docker compose up --build
 ```
 
----
+Services:
 
-# 🔐 Offline Mode
+- `rag-api` on port `8000`
+- `postgres` on port `5432`
 
-After first model download:
+## API Endpoints
 
-```bash
-export HF_HUB_OFFLINE=1
-```
+### Ask
 
-Cache mounted from:
+`POST /ask`
 
-```
-~/.cache/huggingface
-```
-
----
-
-# 🌐 API Usage
-
-## POST `/ask`
+Request:
 
 ```json
 {
-  "question": "What is leave policy?"
+  "question": "What changed in the latest policy?"
 }
 ```
 
-### Streaming Response
+Response format:
 
-```
-Answer text...
+- streamed answer text
+- trailing `SOURCES :`
+- serialized source list, for example:
 
-Sources:
-- employee_policy.pdf
-- leave_rules.xlsx
-```
-
----
-
-## POST `/upload`
-
-Upload document via form-data.
-
----
-
-## DELETE `/delete`
-
-```
-/delete?source=employee.xlsx
+```text
+SOURCES :
+["https://example.com/news","employee_policy.pdf"]
 ```
 
----
+### Legacy Ask
 
-# ⚡ Key Innovations
+`POST /ask-old`
 
-* Hybrid Retrieval (FAISS + BM25)
-* Cross-Encoder Re-ranking
-* Token-based chunking with overlap
-* Streaming LLM responses
-* Agent-based orchestration
-* Incremental indexing pipeline
+Returns a non-streaming RAG-only response with confidence and sources.
 
----
+### Upload
 
-# 📈 Why Hybrid + Re-ranking Matters
+`POST /upload`
 
-| Approach     | Result                     |
-| ------------ | -------------------------- |
-| Vector only  | misses keywords ❌          |
-| BM25 only    | misses semantics ❌         |
-| Hybrid       | balanced retrieval ✅       |
-| + Re-ranking | highly accurate context 🚀 |
+Uploads a document and ingests it into the knowledge base.
 
----
+### Delete Document
 
-# 🧠 Design Principles
+`DELETE /delete?source=<filename>`
 
-* Stateless containers
-* Persistent knowledge store
-* Agent-driven orchestration
-* Offline-first ML deployment
-* Modular architecture
+Removes a source from storage and deletes the local file.
 
----
+### Journal APIs
 
-# 💼 Skills Demonstrated
+`POST /journal/entries`
 
-* Agentic AI Systems (LangGraph)
-* Retrieval-Augmented Generation (RAG)
-* Hybrid Search (Vector + BM25)
-* Re-ranking (Cross-Encoder Models)
-* FastAPI + Streaming APIs
-* React-ready real-time UI
-* Dockerized AI deployment
-* Offline AI inference
+Create a journal entry.
 
----
+```json
+{
+  "user_id": "user-1",
+  "title": "Good day",
+  "content": "Finished a project milestone.",
+  "mood": "happy",
+  "tags": ["work", "progress"]
+}
+```
 
-# 🚀 Future Enhancements
+`GET /journal/entries?user_id=user-1`
 
-* ReAct-style decision agents
-* Multi-tool agent routing
-* Conversation memory
-* Redis caching
-* Perplexity-style citations (highlight chunks)
-* Kubernetes deployment
+List entries for a user.
 
----
+`GET /journal/entries/{entry_id}?user_id=user-1`
 
-# 📜 License
+Fetch a single entry.
 
-MIT
+`DELETE /journal/entries/{entry_id}?user_id=user-1`
 
+Delete a journal entry.
 
-## Next
+`POST /journal/search`
 
-* Confidence Score In API response
-* Tool routing (LangGraph strength) User query -> Decision node -> RAG / Tool / LLM
-* Show uploaded documents in UI
-* ReIndex Button (Upload → Index manually)
-* Performance & Scaling (Redis / in-memory cache) [question → answer]
-* Background ingestion (upload → queue → worker → index)
-* Upload from UI → instant query Already close — just polish UX.
-* Multi-user support (session id, chat id)
-* Multi-tool agent with LangGraph
+Semantic search across a user's journal entries.
 
+```json
+{
+  "user_id": "user-1",
+  "query": "times I felt productive",
+  "k": 5
+}
+```
+
+## Routing Modes
+
+### Local router
+
+Uses the local LLM prompt plus a keyword fallback.
+
+### Structured router
+
+Uses Gemini with a schema that constrains output to:
+
+```json
+{"tool": "web"}
+```
+
+or
+
+```json
+{"tool": "rag"}
+```
+
+This makes the route decision easier to validate and safer to parse than free-form text.
+
+## Current Additions In This Version
+
+- Structured tool routing with schema-constrained output
+- Env-configurable router and web search parameters
+- Web search sources carried through the agent response
+- Streamed sources returned as a serialized list for UI parsing
+- PostgreSQL-backed journal memory endpoints
+- Docker Compose setup for API + Postgres
+
+## Development Notes
+
+- `python3 -m compileall agent configs api.py` is a quick syntax sanity check.
+- If you use the Gemini router, make sure `google-genai` is installed from `requirements.txt`.
+- If web search fails, confirm the environment running the app has `ddgs` installed.

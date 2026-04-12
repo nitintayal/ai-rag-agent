@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str
     RERANK_MODEL: str
     LLM_MODEL: str
+    ROUTER_PROVIDER: str
+    ROUTER_MODEL: str
+    GOOGLE_API_KEY: str
+    WEB_SEARCH_MAX_RESULTS: int
 
     # =========================
     # Retrieval
@@ -40,6 +44,7 @@ class Settings(BaseSettings):
     # =========================
     DATA_DIR: str
     STORAGE_DIR: str
+    JOURNAL_DATABASE_URL: str
 
     # =========================
     # Debug

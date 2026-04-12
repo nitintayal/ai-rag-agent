@@ -5,6 +5,9 @@ from configs.config import settings
 
 store = VectorStore.load("storage")
 
+def run_rag(query):
+    context, sources = hybrid_search_documents(query)
+    return context, sources
 
 def search_documents(query: str):
     query_vector = embed_query(query)
