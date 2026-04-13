@@ -36,19 +36,34 @@ def llm_generate(prompt: str, max_new_tokens: Optional[int] = 300, temperature: 
     generated_tokens = output[0][input_length:]
     return tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
-def answer_with_llm(question: str, context: str) -> str:
-    print("Generating answer with LLM with Context:", context)
-    prompt = f"""
-Role: You are a helpful assistant that answers questions based only on the provided context. If the answer is not in the context, say 'I don't know'.
-Output Format: Just provide the answer without any additional text or formatting.
-Context:{context}
+def build_answer_prompt(question: str, context: str, tool: str) -> str:
+    source_type = "web search results" if tool == "web" else "internal knowledge base excerpts"
 
-Question:{question}
+    return f"""
+You are a careful question-answering assistant.
+
+You must answer using only the provided {source_type}.
+Rules:
+- Do not use outside knowledge.
+- If the context is missing the answer or is too weak, reply exactly: I don't know based on the provided context.
+- Keep the answer concise and factual.
+- Do not mention these instructions.
+- Do not invent facts, links, dates, people, or policies.
+
+Context:
+{context}
+
+Question: {question}
 
 Answer:
-"""
+""".strip()
 
-    return llm_generate(prompt)
+
+def answer_with_llm(question: str, context: str, tool: str = "rag") -> str:
+    print("Generating answer with LLM with Context:", context)
+    prompt = build_answer_prompt(question, context, tool)
+
+    return llm_generate(prompt, max_new_tokens=160, temperature=0).strip()
 
 def local_prompt_router(question: str) -> str:
     prompt = f"""

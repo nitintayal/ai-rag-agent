@@ -5,6 +5,23 @@ from configs.config import settings
 
 store = VectorStore.load("storage")
 
+
+def format_documents_as_context(documents):
+    blocks = []
+
+    for index, document in enumerate(documents, start=1):
+        source = str(document.get("source", "unknown"))
+        content = str(document.get("content", "")).strip()
+
+        if not content:
+            continue
+
+        blocks.append(
+            f"[Document {index} | Source: {source}]\n{content}"
+        )
+
+    return "\n\n".join(blocks)
+
 def run_rag(query):
     context, sources = hybrid_search_documents(query)
     return context, sources
@@ -34,9 +51,7 @@ def hybrid_search_documents(query: str):
     top_docs = reranked_docs[:settings.RERANK_K]
 
 
-    context = "\n".join(
-        r["content"] for r in top_docs
-    )
+    context = format_documents_as_context(top_docs)
 
     sources = [r["source"] for r in top_docs]
 

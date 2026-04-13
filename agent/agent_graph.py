@@ -37,7 +37,11 @@ def generate(state: AgentState):
     if not state['context']:
         return {"answer": "I don't have any relevant information to answer that question.", "sources": []}
 
-    answer = answer_with_llm(state["question"], state["context"])
+    answer = answer_with_llm(
+        state["question"],
+        state["context"],
+        state.get("tool", "rag"),
+    )
 
     return {
         "answer": answer,
