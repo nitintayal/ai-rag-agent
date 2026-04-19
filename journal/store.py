@@ -31,7 +31,7 @@ class JournalStore:
             entry_date DATE NOT NULL,
             embedding JSONB NOT NULL,
             created_at TIMESTAMP NOT NULL,
-            updated_at TIMESTAMP NOT NULL
+            updated_at TIMESTAMP NULL
         );
 
         CREATE INDEX IF NOT EXISTS idx_journal_entries_user_id
@@ -39,6 +39,9 @@ class JournalStore:
 
         CREATE INDEX IF NOT EXISTS idx_journal_entries_entry_date
         ON journal_entries (entry_date DESC);
+
+        ALTER TABLE journal_entries
+        ALTER COLUMN updated_at DROP NOT NULL;
         """
         with self._get_connection() as conn:
             with conn.cursor() as cur:
@@ -46,19 +49,35 @@ class JournalStore:
 
     def list_entries(
         self, user_id: str, limit: int = 20, offset: int = 0
-    ) -> List[Dict]:
-        query = """
+    ) -> Dict:
+        entries_query = """
         SELECT id, user_id, title, content, mood, tags, entry_date, created_at, updated_at
         FROM journal_entries
         WHERE user_id = %s
         ORDER BY created_at DESC
         LIMIT %s OFFSET %s
         """
+        count_query = """
+        SELECT COUNT(*) AS total
+        FROM journal_entries
+        WHERE user_id = %s
+        """
         with self._get_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute(query, (user_id, limit, offset))
+                cur.execute(count_query, (user_id,))
+                total = cur.fetchone()["total"]
+
+                cur.execute(entries_query, (user_id, limit, offset))
                 rows = cur.fetchall()
-        return [self._serialize_row(row) for row in rows]
+
+        items = [self._serialize_row(row) for row in rows]
+        return {
+            "items": items,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + len(items) < total,
+        }
 
     def get_entry(self, entry_id: str, user_id: str) -> Optional[Dict]:
         query = """
@@ -85,7 +104,7 @@ class JournalStore:
             "tags": payload.tags,
             "entry_date": str(entry_date),
             "created_at": now,
-            "updated_at": now,
+            "updated_at": None,
         }
         embedding = embed_query(self._search_text(entry)).tolist()
 
@@ -109,7 +128,7 @@ class JournalStore:
                         entry_date,
                         json.dumps(embedding),
                         now,
-                        now,
+                        None,
                     ),
                 )
 

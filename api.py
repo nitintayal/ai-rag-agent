@@ -15,6 +15,7 @@ from ingestion.ingest_documents import ingest_documents
 import json
 from journal.schemas import (
     JournalEntryCreate,
+    JournalEntriesPage,
     JournalEntryResponse,
     JournalSearchRequest,
     JournalSearchResult,
@@ -115,7 +116,7 @@ def create_journal_entry(payload: JournalEntryCreate):
     return entry
 
 
-@app.get("/journal/entries", response_model=list[JournalEntryResponse])
+@app.get("/journal/entries", response_model=JournalEntriesPage)
 def list_journal_entries(
     user_id: str = Query(..., min_length=1),
     limit: int = Query(default=20, ge=1, le=100),

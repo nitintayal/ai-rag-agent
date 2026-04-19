@@ -35,7 +35,7 @@ def fetch_page_content(url: str) -> str:
             )
             response.raise_for_status()
     except Exception as exc:
-        return f"Failed to fetch page content: {exc}"
+        print(f"Failed to fetch page content: {exc}")
 
     text = trafilatura.extract(response.text) or extract_text_from_html(response.text)
     return text[:4000]

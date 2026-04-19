@@ -22,7 +22,15 @@ class JournalEntryResponse(BaseModel):
     tags: List[str]
     entry_date: str
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime]
+
+
+class JournalEntriesPage(BaseModel):
+    items: List[JournalEntryResponse]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
 
 
 class JournalSearchRequest(BaseModel):
