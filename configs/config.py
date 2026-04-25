@@ -1,4 +1,13 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
+
+
+def _hf_default_path(local_path: str, data_path: str) -> str:
+    data_root = Path("/data")
+    if data_root.exists():
+        return str(data_root / data_path)
+    return local_path
 
 
 class Settings(BaseSettings):
@@ -42,11 +51,11 @@ class Settings(BaseSettings):
     # =========================
     # Storage
     # =========================
-    DATA_DIR: str
-    STORAGE_DIR: str
-    JOURNAL_BACKEND: str
+    DATA_DIR: str = _hf_default_path("data", "data")
+    STORAGE_DIR: str = _hf_default_path("storage", "storage")
+    JOURNAL_BACKEND: str = "postgres"
     JOURNAL_DATABASE_URL: str
-    JOURNAL_SQLITE_PATH: str
+    JOURNAL_SQLITE_PATH: str = _hf_default_path("journal_demo.db", "journal_demo.db")
 
     # =========================
     # Debug
