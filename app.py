@@ -49,6 +49,14 @@ def build_assistant_message(answer, sources):
     return f"{answer}\n\nSources\n{format_sources(sources)}"
 
 
+def history_to_chatbot_messages(history):
+    return [
+        {"role": turn.get("role"), "content": turn.get("content", "")}
+        for turn in history
+        if turn.get("role") in {"user", "assistant"}
+    ]
+
+
 def stream_text(history, assistant_text):
     progressive = ""
     for token in assistant_text.split():
@@ -60,7 +68,7 @@ def stream_text(history, assistant_text):
 def assistant_chat(message, history):
     history = history or list(INITIAL_ASSISTANT_MESSAGES)
     if not message or not message.strip():
-        yield history, "", history
+        yield history_to_chatbot_messages(history), "", history
         return
 
     prompt = message.strip()
@@ -79,7 +87,7 @@ def assistant_chat(message, history):
     ]
 
     for updated_history in stream_text(history, assistant_message):
-        yield updated_history, "", updated_history
+        yield history_to_chatbot_messages(updated_history), "", updated_history
 
 
 def build_journal_context(results):
@@ -107,10 +115,11 @@ def build_journal_context(results):
 def journal_chat(user_id, message, history):
     history = history or list(INITIAL_JOURNAL_MESSAGES)
     if not user_id or not user_id.strip():
-        yield history + [{"role": "assistant", "content": "Enter a user ID to chat with the journal."}], "", history
+        invalid_history = history + [{"role": "assistant", "content": "Enter a user ID to chat with the journal."}]
+        yield history_to_chatbot_messages(invalid_history), "", history
         return
     if not message or not message.strip():
-        yield history, "", history
+        yield history_to_chatbot_messages(history), "", history
         return
 
     store = get_safe_journal_store()
@@ -120,7 +129,7 @@ def journal_chat(user_id, message, history):
             {"role": "user", "content": message.strip()},
             {"role": "assistant", "content": response},
         ]
-        yield history, "", history
+        yield history_to_chatbot_messages(history), "", history
         return
 
     prompt = message.strip()
@@ -131,7 +140,7 @@ def journal_chat(user_id, message, history):
             {"role": "user", "content": prompt},
             {"role": "assistant", "content": response},
         ]
-        yield history, "", history
+        yield history_to_chatbot_messages(history), "", history
         return
 
     context, sources = build_journal_context(results)
@@ -143,15 +152,15 @@ def journal_chat(user_id, message, history):
     ]
 
     for updated_history in stream_text(history, assistant_message):
-        yield updated_history, "", updated_history
+        yield history_to_chatbot_messages(updated_history), "", updated_history
 
 
 def clear_assistant_chat():
-    return INITIAL_ASSISTANT_MESSAGES, "", INITIAL_ASSISTANT_MESSAGES
+    return history_to_chatbot_messages(INITIAL_ASSISTANT_MESSAGES), "", INITIAL_ASSISTANT_MESSAGES
 
 
 def clear_journal_chat():
-    return INITIAL_JOURNAL_MESSAGES, "", INITIAL_JOURNAL_MESSAGES
+    return history_to_chatbot_messages(INITIAL_JOURNAL_MESSAGES), "", INITIAL_JOURNAL_MESSAGES
 
 
 def upload_document(file_obj):
@@ -377,7 +386,9 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
                 with gr.Tab("Assistant"):
                     with gr.Group(elem_classes=["chat-card"]):
                         assistant_chatbot = gr.Chatbot(
-                            value=INITIAL_ASSISTANT_MESSAGES,
+                            value=history_to_chatbot_messages(INITIAL_ASSISTANT_MESSAGES),
+                            type="messages",
+                            allow_tags=False,
                             height=640,
                             layout="bubble",
                             avatar_images=(None, None),
@@ -402,7 +413,9 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
                             info="Used to scope journal search and reflection.",
                         )
                         journal_chatbot = gr.Chatbot(
-                            value=INITIAL_JOURNAL_MESSAGES,
+                            value=history_to_chatbot_messages(INITIAL_JOURNAL_MESSAGES),
+                            type="messages",
+                            allow_tags=False,
                             height=580,
                             layout="bubble",
                             avatar_images=(None, None),
@@ -522,11 +535,4 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
 
 
 if __name__ == "__main__":
-    demo.launch(
-        theme=gr.themes.Soft(
-            primary_hue="blue",
-            secondary_hue="slate",
-            neutral_hue="zinc",
-        ),
-        css=CUSTOM_CSS,
-    )
+    demo.launch()
