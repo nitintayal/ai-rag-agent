@@ -44,7 +44,9 @@ class Settings(BaseSettings):
     # =========================
     DATA_DIR: str
     STORAGE_DIR: str
+    JOURNAL_BACKEND: str
     JOURNAL_DATABASE_URL: str
+    JOURNAL_SQLITE_PATH: str
 
     # =========================
     # Debug

@@ -21,7 +21,7 @@ from journal.schemas import (
     JournalSearchRequest,
     JournalSearchResult,
 )
-from journal.store import JournalStore
+from journal.factory import get_journal_store
 
 DATA_FOLDER = Path(settings.DATA_DIR)
 
@@ -35,7 +35,7 @@ app.add_middleware(
 )
 # Load vector store once at startup
 store = VectorStore.load(settings.STORAGE_DIR)
-journal_store = JournalStore(settings.JOURNAL_DATABASE_URL)
+journal_store = get_journal_store()
 
 class QuestionRequest(BaseModel):
     question: str

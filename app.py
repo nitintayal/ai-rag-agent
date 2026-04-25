@@ -8,7 +8,7 @@ from agent.local_llm_answer import answer_with_llm
 from configs.config import settings
 from ingestion.ingest_documents import ingest_documents
 from journal.schemas import JournalEntryCreate, JournalEntryUpdate
-from journal.store import JournalStore
+from journal.factory import get_journal_store
 
 
 APP_TITLE = "AI RAG Agent"
@@ -31,9 +31,9 @@ INITIAL_JOURNAL_MESSAGES = [
 ]
 
 
-def get_journal_store():
+def get_safe_journal_store():
     try:
-        return JournalStore(settings.JOURNAL_DATABASE_URL)
+        return get_journal_store()
     except Exception as exc:
         print(f"Journal store unavailable: {exc}")
         return None
@@ -113,7 +113,7 @@ def journal_chat(user_id, message, history):
         yield history, "", history
         return
 
-    store = get_journal_store()
+    store = get_safe_journal_store()
     if store is None:
         response = "Journal database is unavailable. Check `JOURNAL_DATABASE_URL`."
         history = history + [
@@ -175,7 +175,7 @@ def create_journal_entry(user_id, title, content, mood, tags, entry_date):
     if not content.strip():
         return "Journal content is required."
 
-    store = get_journal_store()
+    store = get_safe_journal_store()
     if store is None:
         return "Journal database is unavailable. Check `JOURNAL_DATABASE_URL`."
 
@@ -197,7 +197,7 @@ def update_journal_entry(entry_id, user_id, title, content, mood, tags, entry_da
     if not user_id.strip():
         return "User ID is required."
 
-    store = get_journal_store()
+    store = get_safe_journal_store()
     if store is None:
         return "Journal database is unavailable. Check `JOURNAL_DATABASE_URL`."
 
@@ -227,7 +227,7 @@ def list_journal_entries(user_id, limit, offset):
     if not user_id.strip():
         return "Enter a user ID to browse journal entries."
 
-    store = get_journal_store()
+    store = get_safe_journal_store()
     if store is None:
         return "Journal database is unavailable. Check `JOURNAL_DATABASE_URL`."
 
@@ -266,7 +266,7 @@ def search_journal_entries(user_id, query, k):
     if not query.strip():
         return "Enter a search query."
 
-    store = get_journal_store()
+    store = get_safe_journal_store()
     if store is None:
         return "Journal database is unavailable. Check `JOURNAL_DATABASE_URL`."
 

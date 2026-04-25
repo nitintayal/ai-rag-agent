@@ -1,6 +1,6 @@
 # AI RAG Agent
 
-Agentic RAG system built with FastAPI, LangGraph, hybrid retrieval, local Hugging Face generation, optional structured-output routing, and a PostgreSQL-backed journal memory API.
+Agentic RAG system built with FastAPI, LangGraph, hybrid retrieval, local Hugging Face generation, optional structured-output routing, and a journal memory layer that can run on PostgreSQL or SQLite depending on environment.
 
 ## What It Does
 
@@ -8,7 +8,9 @@ Agentic RAG system built with FastAPI, LangGraph, hybrid retrieval, local Huggin
 - Routes time-sensitive or external queries to web search.
 - Streams answers and source lists from the `/ask` endpoint.
 - Supports document upload, ingestion, and deletion.
-- Stores personal journal entries in PostgreSQL and supports semantic journal search.
+- Stores personal journal entries with pluggable backends:
+  - PostgreSQL for the product/backend deployment
+  - SQLite for demo/Hugging Face deployment
 - Includes a parallel Gradio chat app for Hugging Face Spaces demos.
 
 ## Core Features
@@ -20,6 +22,7 @@ Agentic RAG system built with FastAPI, LangGraph, hybrid retrieval, local Huggin
 - Optional structured router using Gemini JSON/schema output
 - Web search with source URL capture
 - Journal CRUD + semantic search
+- Parallel deployment paths for FastAPI and Gradio
 - Docker Compose setup with API + Postgres
 
 ## Architecture
@@ -70,9 +73,13 @@ ai-rag-agent/
 ├── embeddings/
 ├── ingestion/
 ├── journal/
+│   ├── factory.py
+│   ├── postgres_store.py
 │   ├── schemas.py
+│   ├── sqlite_store.py
 │   └── store.py
 ├── retrieval/
+├── app.py
 ├── api.py
 ├── docker-compose.yml
 ├── main.py
@@ -112,7 +119,9 @@ WEB_SEARCH_MAX_RESULTS=3
 
 DATA_DIR=data
 STORAGE_DIR=storage
+JOURNAL_BACKEND=postgres
 JOURNAL_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/journal_db
+JOURNAL_SQLITE_PATH=journal_demo.db
 ```
 
 Notes:
@@ -120,6 +129,8 @@ Notes:
 - Use `ROUTER_PROVIDER=local` to keep routing fully local.
 - Use `ROUTER_PROVIDER=gemini` to enable schema-constrained routing with Gemini.
 - `GOOGLE_API_KEY` is required only for the Gemini router path.
+- Use `JOURNAL_BACKEND=postgres` for the product/backend deployment.
+- Use `JOURNAL_BACKEND=sqlite` for demo deployments such as Hugging Face Spaces.
 
 ### 4. Ingest documents
 
@@ -143,6 +154,34 @@ python3 app.py
 
 This launches a ChatGPT-style Gradio UI that runs in parallel with the existing FastAPI backend path.
 
+## Journal Backends
+
+The journal layer supports two storage modes behind the same API:
+
+- `postgres`: product/default backend
+- `sqlite`: demo backend
+
+### Product mode
+
+```env
+JOURNAL_BACKEND=postgres
+JOURNAL_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/journal_db
+```
+
+### Demo mode
+
+```env
+JOURNAL_BACKEND=sqlite
+JOURNAL_SQLITE_PATH=journal_demo.db
+```
+
+For Hugging Face Spaces, use persistent storage and point SQLite at `/data`:
+
+```env
+JOURNAL_BACKEND=sqlite
+JOURNAL_SQLITE_PATH=/data/journal_demo.db
+```
+
 ## Docker
 
 Run the API and PostgreSQL together:
@@ -162,6 +201,26 @@ Services:
 - `app.py`: Gradio demo entrypoint for Hugging Face Spaces
 
 For Hugging Face Spaces, keep `app.py` at the repo root and install dependencies from `requirements.txt`.
+
+Recommended deployment split:
+
+- Product stack: FastAPI + PostgreSQL
+- Demo stack: Gradio + SQLite
+
+### Hugging Face Spaces
+
+Recommended config for the demo:
+
+```env
+JOURNAL_BACKEND=sqlite
+JOURNAL_SQLITE_PATH=/data/journal_demo.db
+```
+
+Notes:
+
+- `app.py` is the Space entrypoint.
+- Attach persistent storage if you want uploaded files, vector indexes, and journal data to survive restarts.
+- SQLite is recommended for Spaces because a normal external PostgreSQL service on port `5432` is not the simplest deployment path there.
 
 ## API Endpoints
 
@@ -224,11 +283,27 @@ Create a journal entry.
 
 `GET /journal/entries?user_id=user-1`
 
-List entries for a user.
+List entries for a user with pagination metadata.
+
+Response shape:
+
+```json
+{
+  "items": [],
+  "total": 0,
+  "limit": 20,
+  "offset": 0,
+  "has_more": false
+}
+```
 
 `GET /journal/entries/{entry_id}?user_id=user-1`
 
 Fetch a single entry.
+
+`PATCH /journal/entries/{entry_id}?user_id=user-1`
+
+Update an existing journal entry. This preserves `created_at` and writes `updated_at`.
 
 `DELETE /journal/entries/{entry_id}?user_id=user-1`
 
@@ -245,6 +320,13 @@ Semantic search across a user's journal entries.
   "k": 5
 }
 ```
+
+### Journal timestamp behavior
+
+- `created_at` is set once when a journal entry is created.
+- `updated_at` stays empty until the entry is edited.
+- Proper edits should use `PATCH /journal/entries/{entry_id}`.
+- For backward compatibility, `POST /journal/entries?entry_id=...` also updates an existing entry if an `entry_id` is supplied.
 
 ## Routing Modes
 
