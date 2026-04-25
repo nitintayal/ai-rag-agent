@@ -1,3 +1,14 @@
+---
+title: AI RAG Agent Demo
+emoji: 💬
+colorFrom: amber
+colorTo: blue
+sdk: gradio
+sdk_version: 6.13.0
+app_file: app.py
+pinned: false
+---
+
 # AI RAG Agent
 
 Agentic RAG system built with FastAPI, LangGraph, hybrid retrieval, local Hugging Face generation, optional structured-output routing, and a journal memory layer that can run on PostgreSQL or SQLite depending on environment.
@@ -131,6 +142,7 @@ Notes:
 - `GOOGLE_API_KEY` is required only for the Gemini router path.
 - Use `JOURNAL_BACKEND=postgres` for the product/backend deployment.
 - Use `JOURNAL_BACKEND=sqlite` for demo deployments such as Hugging Face Spaces.
+- When `/data` exists, storage defaults automatically point there for the demo.
 
 ### 4. Ingest documents
 
@@ -182,6 +194,8 @@ JOURNAL_BACKEND=sqlite
 JOURNAL_SQLITE_PATH=/data/journal_demo.db
 ```
 
+You can start from [.env.hf.example] for a Space-friendly configuration.
+
 ## Docker
 
 Run the API and PostgreSQL together:
@@ -221,6 +235,15 @@ Notes:
 - `app.py` is the Space entrypoint.
 - Attach persistent storage if you want uploaded files, vector indexes, and journal data to survive restarts.
 - SQLite is recommended for Spaces because a normal external PostgreSQL service on port `5432` is not the simplest deployment path there.
+- `DATA_DIR`, `STORAGE_DIR`, and `JOURNAL_SQLITE_PATH` now default to `/data/...` automatically when that mount exists.
+
+### Hugging Face Deployment Steps
+
+1. Create a new Hugging Face Space and choose `Gradio`.
+2. Push this repository to the Space.
+3. In the Space settings, add variables from [.env.hf.example].
+4. Attach persistent storage so `/data` survives restarts.
+5. Launch the Space with `app.py` as the entrypoint.
 
 ## API Endpoints
 
