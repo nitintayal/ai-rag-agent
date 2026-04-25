@@ -1,0 +1,39 @@
+services:
+  rag-api:
+    build: .
+    container_name: rag-api
+    depends_on:
+      - postgres
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - ./storage:/app/storage
+      - ./data:/app/data
+      - ~/.cache/huggingface:/root/.cache/huggingface   # ⭐ FIX
+
+    environment:
+      - HF_HUB_OFFLINE=1
+      - JOURNAL_DATABASE_URL=postgresql://postgres:postgres@postgres:5432/journal_db
+
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: rag-postgres
+    environment:
+      POSTGRES_DB: journal_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
