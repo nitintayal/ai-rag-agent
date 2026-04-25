@@ -1,7 +1,7 @@
 ---
 title: AI RAG Agent Demo
 emoji: 💬
-colorFrom: amber
+colorFrom: yellow
 colorTo: blue
 sdk: gradio
 sdk_version: 6.13.0
