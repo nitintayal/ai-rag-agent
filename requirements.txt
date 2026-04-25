@@ -26,7 +26,7 @@ fastapi>=0.110
 uvicorn[standard]>=0.29
 pydantic>=2.6
 python-multipart>=0.0.9 # for file uploads
-gradio>=4.44,<6.0
+gradio>=4.44
 pydantic-settings>=2.2
 
 # ==================================================
