@@ -13,6 +13,14 @@ class JournalEntryCreate(BaseModel):
     entry_date: Optional[date] = None
 
 
+class JournalEntryUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = Field(default=None, min_length=1)
+    mood: Optional[str] = None
+    tags: Optional[List[str]] = None
+    entry_date: Optional[date] = None
+
+
 class JournalEntryResponse(BaseModel):
     id: str
     user_id: str

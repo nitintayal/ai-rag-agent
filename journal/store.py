@@ -1,5 +1,5 @@
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Dict, List, Optional
 from uuid import uuid4
 
@@ -8,7 +8,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 from embeddings.sentence_embeddings import embed_query
-from journal.schemas import JournalEntryCreate
+from journal.schemas import JournalEntryCreate, JournalEntryUpdate
 
 
 class JournalStore:
@@ -42,6 +42,22 @@ class JournalStore:
 
         ALTER TABLE journal_entries
         ALTER COLUMN updated_at DROP NOT NULL;
+
+        CREATE OR REPLACE FUNCTION preserve_journal_created_at()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            NEW.created_at = OLD.created_at;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        DROP TRIGGER IF EXISTS trg_preserve_journal_created_at
+        ON journal_entries;
+
+        CREATE TRIGGER trg_preserve_journal_created_at
+        BEFORE UPDATE ON journal_entries
+        FOR EACH ROW
+        EXECUTE FUNCTION preserve_journal_created_at();
         """
         with self._get_connection() as conn:
             with conn.cursor() as cur:
@@ -92,7 +108,7 @@ class JournalStore:
         return self._serialize_row(row) if row else None
 
     def add_entry(self, payload: JournalEntryCreate) -> Dict:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         entry_date = payload.entry_date or date.today()
         entry_id = str(uuid4())
         entry = {
@@ -133,6 +149,53 @@ class JournalStore:
                 )
 
         return entry
+
+    def update_entry(
+        self, entry_id: str, user_id: str, payload: JournalEntryUpdate
+    ) -> Optional[Dict]:
+        current_entry = self.get_entry(entry_id=entry_id, user_id=user_id)
+        if current_entry is None:
+            return None
+
+        updated_entry = dict(current_entry)
+        for field, value in payload.model_dump(exclude_unset=True).items():
+            if field in {"content", "tags", "entry_date"} and value is None:
+                continue
+            updated_entry[field] = value
+
+        embedding = embed_query(self._search_text(updated_entry)).tolist()
+
+        update_sql = """
+        UPDATE journal_entries
+        SET title = %s,
+            content = %s,
+            mood = %s,
+            tags = %s::jsonb,
+            entry_date = %s,
+            embedding = %s::jsonb,
+            created_at = journal_entries.created_at,
+            updated_at = NOW()
+        WHERE id = %s AND user_id = %s
+        RETURNING id, user_id, title, content, mood, tags, entry_date, created_at, updated_at
+        """
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    update_sql,
+                    (
+                        updated_entry["title"],
+                        updated_entry["content"],
+                        updated_entry["mood"],
+                        json.dumps(updated_entry["tags"]),
+                        updated_entry["entry_date"],
+                        json.dumps(embedding),
+                        entry_id,
+                        user_id,
+                    ),
+                )
+                row = cur.fetchone()
+
+        return self._serialize_row(row) if row else None
 
     def delete_entry(self, entry_id: str, user_id: str) -> bool:
         delete_sql = """

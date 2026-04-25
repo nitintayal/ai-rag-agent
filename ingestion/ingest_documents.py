@@ -2,23 +2,23 @@ from ingestion.load_documents import load_documents, load_single_file
 from ingestion.chunk_documents import chunk_documents
 from embeddings.sentence_embeddings import embed_texts
 from retrieval.vector_store import VectorStore
+from configs.config import settings
 
 
 def ingest_documents(single_file=None):
 
     print("📄 Loading documents...")
 
-    doc = load_single_file(single_file) if single_file else load_documents("data")
+    doc = load_single_file(single_file) if single_file else load_documents(settings.DATA_DIR)
+
+    if not doc:
+        print("⚠️ No documents found to ingest.")
+        return
 
     print(f"Loaded {len(doc)} documents")
 
     print("✂️ Chunking documents...")
-    chunks = []
-    for chunk in chunk_documents(doc):
-        chunks.append({
-            "source": str(chunk["source"]),
-            "content": chunk
-        })
+    chunks = chunk_documents(doc)
 
     texts = [c["content"] for c in chunks]
 
@@ -31,10 +31,13 @@ def ingest_documents(single_file=None):
 
     print("📦 Updating vector store...")
 
-    store = VectorStore.load()
-
-    store.add(embeddings, chunks)
-    store.build_bm25()
-    store.save()
+    try:
+        store = VectorStore.load(settings.STORAGE_DIR)
+        store.add(embeddings, chunks)
+        store.build_bm25()
+        store.save(settings.STORAGE_DIR)
+    except Exception:
+        store = VectorStore.from_vectors(embeddings, chunks)
+        store.save(settings.STORAGE_DIR)
 
     print("✅ Ingestion complete")

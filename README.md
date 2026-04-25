@@ -9,6 +9,7 @@ Agentic RAG system built with FastAPI, LangGraph, hybrid retrieval, local Huggin
 - Streams answers and source lists from the `/ask` endpoint.
 - Supports document upload, ingestion, and deletion.
 - Stores personal journal entries in PostgreSQL and supports semantic journal search.
+- Includes a parallel Gradio chat app for Hugging Face Spaces demos.
 
 ## Core Features
 
@@ -134,6 +135,14 @@ uvicorn api:app --reload --port 8000
 
 Open docs at [http://localhost:8000/docs](http://localhost:8000/docs).
 
+### 6. Run the Gradio demo
+
+```bash
+python3 app.py
+```
+
+This launches a ChatGPT-style Gradio UI that runs in parallel with the existing FastAPI backend path.
+
 ## Docker
 
 Run the API and PostgreSQL together:
@@ -146,6 +155,13 @@ Services:
 
 - `rag-api` on port `8000`
 - `postgres` on port `5432`
+
+## Deployment Modes
+
+- `api.py`: backend/API entrypoint for product integrations such as a future Vercel frontend
+- `app.py`: Gradio demo entrypoint for Hugging Face Spaces
+
+For Hugging Face Spaces, keep `app.py` at the repo root and install dependencies from `requirements.txt`.
 
 ## API Endpoints
 

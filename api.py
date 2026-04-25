@@ -17,6 +17,7 @@ from journal.schemas import (
     JournalEntryCreate,
     JournalEntriesPage,
     JournalEntryResponse,
+    JournalEntryUpdate,
     JournalSearchRequest,
     JournalSearchResult,
 )
@@ -111,7 +112,26 @@ def delete_file(source: str):
 
 
 @app.post("/journal/entries", response_model=JournalEntryResponse)
-def create_journal_entry(payload: JournalEntryCreate):
+def create_journal_entry(
+    payload: JournalEntryCreate,
+    entry_id: str | None = Query(default=None),
+):
+    if entry_id:
+        entry = journal_store.update_entry(
+            entry_id=entry_id,
+            user_id=payload.user_id,
+            payload=JournalEntryUpdate(
+                title=payload.title,
+                content=payload.content,
+                mood=payload.mood,
+                tags=payload.tags,
+                entry_date=payload.entry_date,
+            ),
+        )
+        if entry is None:
+            raise HTTPException(status_code=404, detail="Journal entry not found")
+        return entry
+
     entry = journal_store.add_entry(payload)
     return entry
 
@@ -128,6 +148,22 @@ def list_journal_entries(
 @app.get("/journal/entries/{entry_id}", response_model=JournalEntryResponse)
 def get_journal_entry(entry_id: str, user_id: str = Query(..., min_length=1)):
     entry = journal_store.get_entry(entry_id=entry_id, user_id=user_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Journal entry not found")
+    return entry
+
+
+@app.patch("/journal/entries/{entry_id}", response_model=JournalEntryResponse)
+def update_journal_entry(
+    entry_id: str,
+    payload: JournalEntryUpdate,
+    user_id: str = Query(..., min_length=1),
+):
+    entry = journal_store.update_entry(
+        entry_id=entry_id,
+        user_id=user_id,
+        payload=payload,
+    )
     if entry is None:
         raise HTTPException(status_code=404, detail="Journal entry not found")
     return entry

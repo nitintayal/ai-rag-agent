@@ -3,7 +3,13 @@ from retrieval.vector_store import VectorStore
 from ranker.cross_encoder import rerank
 from configs.config import settings
 
-store = VectorStore.load("storage")
+
+def get_store():
+    try:
+        return VectorStore.load(settings.STORAGE_DIR)
+    except Exception as exc:
+        print(f"RAG store unavailable: {exc}")
+        return None
 
 
 def format_documents_as_context(documents):
@@ -27,6 +33,10 @@ def run_rag(query):
     return context, sources
 
 def search_documents(query: str):
+    store = get_store()
+    if store is None:
+        return "", []
+
     query_vector = embed_query(query)
     results = store.search(query_vector, k=3)
 
@@ -39,6 +49,10 @@ def search_documents(query: str):
     return context, sources
 
 def hybrid_search_documents(query: str):
+    store = get_store()
+    if store is None:
+        return "", []
+
     query_vector = embed_query(query)
     results = store.hybrid_search(query, query_vector, k=settings.HYBRID_K)
 
