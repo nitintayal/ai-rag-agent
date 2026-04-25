@@ -1,3 +1,4 @@
+import inspect
 import shutil
 from pathlib import Path
 
@@ -31,6 +32,24 @@ INITIAL_JOURNAL_MESSAGES = [
 ]
 
 
+def get_chatbot_kwargs():
+    try:
+        params = inspect.signature(gr.Chatbot.__init__).parameters
+    except (TypeError, ValueError):
+        return {}, "tuples"
+
+    kwargs = {}
+    if "type" in params:
+        kwargs["type"] = "messages"
+    if "allow_tags" in params:
+        kwargs["allow_tags"] = False
+
+    return kwargs, "messages" if "type" in kwargs else "tuples"
+
+
+CHATBOT_KWARGS, CHATBOT_FORMAT = get_chatbot_kwargs()
+
+
 def get_safe_journal_store():
     try:
         return get_journal_store()
@@ -50,11 +69,27 @@ def build_assistant_message(answer, sources):
 
 
 def history_to_chatbot_messages(history):
-    return [
-        {"role": turn.get("role"), "content": turn.get("content", "")}
-        for turn in history
-        if turn.get("role") in {"user", "assistant"}
-    ]
+    if CHATBOT_FORMAT == "messages":
+        return [
+            {"role": turn.get("role"), "content": turn.get("content", "")}
+            for turn in history
+            if turn.get("role") in {"user", "assistant"}
+        ]
+
+    messages = []
+    pending_user = None
+    for turn in history:
+        role = turn.get("role")
+        content = turn.get("content", "")
+        if role == "user":
+            pending_user = content
+        elif role == "assistant":
+            if pending_user is None:
+                messages.append(["", content])
+            else:
+                messages.append([pending_user, content])
+                pending_user = None
+    return messages
 
 
 def stream_text(history, assistant_text):
@@ -387,13 +422,12 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
                     with gr.Group(elem_classes=["chat-card"]):
                         assistant_chatbot = gr.Chatbot(
                             value=history_to_chatbot_messages(INITIAL_ASSISTANT_MESSAGES),
-                            type="messages",
-                            allow_tags=False,
                             height=640,
                             layout="bubble",
                             avatar_images=(None, None),
                             label="Knowledge Copilot",
                             placeholder="Start a conversation with your knowledge assistant.",
+                            **CHATBOT_KWARGS,
                         )
                         with gr.Row():
                             assistant_msg = gr.Textbox(
@@ -414,13 +448,12 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
                         )
                         journal_chatbot = gr.Chatbot(
                             value=history_to_chatbot_messages(INITIAL_JOURNAL_MESSAGES),
-                            type="messages",
-                            allow_tags=False,
                             height=580,
                             layout="bubble",
                             avatar_images=(None, None),
                             label="Journal Reflection Chat",
                             placeholder="Ask reflective questions about your journal.",
+                            **CHATBOT_KWARGS,
                         )
                         with gr.Row():
                             journal_msg = gr.Textbox(
