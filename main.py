@@ -6,13 +6,15 @@ from embeddings.sentence_embeddings import embed_texts, embed_query
 from retrieval.vector_store import VectorStore
 from pathlib import Path
 from agent.local_llm_answer import answer_with_llm
-
+from configs.config import settings
+DATA_FOLDER = Path(settings.DATA_DIR)
+STORAGE_FOLDER = Path(settings.STORAGE_DIR)
 
 def main():
     load_dotenv()
 
     print("📄 Loading documents...")
-    documents = load_documents("data")
+    documents = load_documents(DATA_FOLDER)
 
     # ---- Chunk documents ----
     print("✂️ Chunking documents...")
@@ -24,12 +26,10 @@ def main():
     print(f"✅ Loaded {len(documents)} documents")
     print(f"✂️ Created {len(texts)} chunks")
 
-    STORE_PATH = "storage"
-
     # ---- Build or load vector store ----
-    if Path(f"{STORE_PATH}/faiss.index").exists():
+    if Path(f"{STORAGE_FOLDER}/faiss.index").exists():
         print("📦 Loading vector store from disk...")
-        store = VectorStore.load(STORE_PATH)
+        store = VectorStore.load(STORAGE_FOLDER)
         existing_sources = set(doc["source"] for doc in store.documents)
         print(f"✅ Loaded vector store with {len(existing_sources)} old documents")
         new_docs = [
@@ -49,7 +49,7 @@ def main():
             new_texts = [c["content"] for c in new_chunks]
             new_vectors = embed_texts(new_texts)
             store.add(new_vectors, new_chunks)
-            store.save(STORE_PATH)
+            store.save(STORAGE_FOLDER)
     else:
         print("🧠 Creating embeddings...")
         vectors = embed_texts(texts)
@@ -58,7 +58,7 @@ def main():
         store = VectorStore.from_vectors(vectors, chunks)
 
         print("💾 Saving vector store...")
-        store.save(STORE_PATH)
+        store.save(STORAGE_FOLDER)
 
     # # 🔍 Inspect a sample embedding
     # print("\n🔢 Sample embedding inspection:")

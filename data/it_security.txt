@@ -1,5 +1,0 @@
-IT Security Policy
-
-All employees must change passwords every 90 days.
-Two-factor authentication is mandatory for VPN access.
-Sharing credentials is strictly prohibited.
