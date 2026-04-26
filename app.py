@@ -421,7 +421,7 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
                 with gr.Tab("Assistant"):
                     with gr.Group(elem_classes=["chat-card"]):
                         assistant_chatbot = gr.Chatbot(
-                            value=history_to_chatbot_messages(INITIAL_ASSISTANT_MESSAGES),
+                            value=INITIAL_ASSISTANT_MESSAGES,
                             height=640,
                             layout="bubble",
                             avatar_images=(None, None),
@@ -447,7 +447,7 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
                             info="Used to scope journal search and reflection.",
                         )
                         journal_chatbot = gr.Chatbot(
-                            value=history_to_chatbot_messages(INITIAL_JOURNAL_MESSAGES),
+                            value=INITIAL_JOURNAL_MESSAGES,
                             height=580,
                             layout="bubble",
                             avatar_images=(None, None),
