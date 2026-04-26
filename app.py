@@ -115,14 +115,19 @@ def assistant_chat(message, history):
         answer = f"I hit an error while processing that request: {exc}"
         sources = []
 
-    assistant_message = build_assistant_message(answer, sources)
-    history = history + [
-        {"role": "user", "content": prompt},
-        {"role": "assistant", "content": ""},
-    ]
+    # Replace last assistant message
+    history[-1] = {"role": "assistant", "content": answer}
 
-    for updated_history in stream_text(history, assistant_message):
-        yield history_to_chatbot_messages(updated_history), "", updated_history
+    yield history, "", history
+
+    # assistant_message = build_assistant_message(answer, sources)
+    # history = history + [
+    #     {"role": "user", "content": prompt},
+    #     {"role": "assistant", "content": ""},
+    # ]
+
+    # for updated_history in stream_text(history, assistant_message):
+    #     yield history_to_chatbot_messages(updated_history), "", updated_history
 
 
 def build_journal_context(results):

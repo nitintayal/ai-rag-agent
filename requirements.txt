@@ -51,6 +51,7 @@ ddgs>=9.0.0
 httpx>=0.27,<1.0
 trafilatura>=1.9,<2.0
 psycopg2-binary>=2.9,<3.0
+psycopg2
 
 # Agent Framework
 langgraph>=0.2
