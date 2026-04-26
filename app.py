@@ -116,7 +116,7 @@ def assistant_chat(message, history):
         sources = []
 
     # Replace last assistant message
-    history[-1] = {"role": "assistant", "content": answer}
+    history[-1] = {"role": "assistant", "content": answer + ("\n\nSources:\n" + format_sources(sources) if sources else "")}
 
     yield history, "", history
 
@@ -186,13 +186,17 @@ def journal_chat(user_id, message, history):
     context, sources = build_journal_context(results)
     answer = answer_with_llm(prompt, context, tool="rag")
     assistant_message = build_assistant_message(answer, sources)
-    history = history + [
-        {"role": "user", "content": prompt},
-        {"role": "assistant", "content": ""},
-    ]
 
-    for updated_history in stream_text(history, assistant_message):
-        yield history_to_chatbot_messages(updated_history), "", updated_history
+    history[-1] = {"role": "assistant", "content": assistant_message}
+
+    yield history, "", history
+    # history = history + [
+    #     {"role": "user", "content": prompt},
+    #     {"role": "assistant", "content": ""},
+    # ]
+
+    # for updated_history in stream_text(history, assistant_message):
+    #     yield history_to_chatbot_messages(updated_history), "", updated_history
 
 
 def clear_assistant_chat():
