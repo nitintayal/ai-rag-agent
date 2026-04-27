@@ -11,7 +11,7 @@ services:
     volumes:
       - ./storage:/app/storage
       - ./data:/app/data
-      - ~/.cache/huggingface:/root/.cache/huggingface   # ⭐ FIX
+      - ~/.cache/huggingface:/root/.cache/huggingface   # FIX
 
     environment:
       - HF_HUB_OFFLINE=1

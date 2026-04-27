@@ -1,3 +1,4 @@
+import inspect
 import shutil
 from pathlib import Path
 
@@ -31,6 +32,24 @@ INITIAL_JOURNAL_MESSAGES = [
 ]
 
 
+def get_chatbot_kwargs():
+    try:
+        params = inspect.signature(gr.Chatbot.__init__).parameters
+    except (TypeError, ValueError):
+        return {}, "tuples"
+
+    kwargs = {}
+    if "type" in params:
+        kwargs["type"] = "messages"
+    if "allow_tags" in params:
+        kwargs["allow_tags"] = False
+
+    return kwargs, "messages" if "type" in kwargs else "tuples"
+
+
+CHATBOT_KWARGS, CHATBOT_FORMAT = get_chatbot_kwargs()
+
+
 def get_safe_journal_store():
     try:
         return get_journal_store()
@@ -49,6 +68,30 @@ def build_assistant_message(answer, sources):
     return f"{answer}\n\nSources\n{format_sources(sources)}"
 
 
+def history_to_chatbot_messages(history):
+    if CHATBOT_FORMAT == "messages":
+        return [
+            {"role": turn.get("role"), "content": turn.get("content", "")}
+            for turn in history
+            if turn.get("role") in {"user", "assistant"}
+        ]
+
+    messages = []
+    pending_user = None
+    for turn in history:
+        role = turn.get("role")
+        content = turn.get("content", "")
+        if role == "user":
+            pending_user = content
+        elif role == "assistant":
+            if pending_user is None:
+                messages.append(["", content])
+            else:
+                messages.append([pending_user, content])
+                pending_user = None
+    return messages
+
+
 def stream_text(history, assistant_text):
     progressive = ""
     for token in assistant_text.split():
@@ -60,7 +103,7 @@ def stream_text(history, assistant_text):
 def assistant_chat(message, history):
     history = history or list(INITIAL_ASSISTANT_MESSAGES)
     if not message or not message.strip():
-        yield history, "", history
+        yield history_to_chatbot_messages(history), "", history
         return
 
     prompt = message.strip()
@@ -72,14 +115,19 @@ def assistant_chat(message, history):
         answer = f"I hit an error while processing that request: {exc}"
         sources = []
 
-    assistant_message = build_assistant_message(answer, sources)
-    history = history + [
-        {"role": "user", "content": prompt},
-        {"role": "assistant", "content": ""},
-    ]
+    # Replace last assistant message
+    history[-1] = {"role": "assistant", "content": answer + ("\n\nSources:\n" + format_sources(sources) if sources else "")}
 
-    for updated_history in stream_text(history, assistant_message):
-        yield updated_history, "", updated_history
+    yield history, "", history
+
+    # assistant_message = build_assistant_message(answer, sources)
+    # history = history + [
+    #     {"role": "user", "content": prompt},
+    #     {"role": "assistant", "content": ""},
+    # ]
+
+    # for updated_history in stream_text(history, assistant_message):
+    #     yield history_to_chatbot_messages(updated_history), "", updated_history
 
 
 def build_journal_context(results):
@@ -107,10 +155,11 @@ def build_journal_context(results):
 def journal_chat(user_id, message, history):
     history = history or list(INITIAL_JOURNAL_MESSAGES)
     if not user_id or not user_id.strip():
-        yield history + [{"role": "assistant", "content": "Enter a user ID to chat with the journal."}], "", history
+        invalid_history = history + [{"role": "assistant", "content": "Enter a user ID to chat with the journal."}]
+        yield history_to_chatbot_messages(invalid_history), "", history
         return
     if not message or not message.strip():
-        yield history, "", history
+        yield history_to_chatbot_messages(history), "", history
         return
 
     store = get_safe_journal_store()
@@ -120,7 +169,7 @@ def journal_chat(user_id, message, history):
             {"role": "user", "content": message.strip()},
             {"role": "assistant", "content": response},
         ]
-        yield history, "", history
+        yield history_to_chatbot_messages(history), "", history
         return
 
     prompt = message.strip()
@@ -131,27 +180,31 @@ def journal_chat(user_id, message, history):
             {"role": "user", "content": prompt},
             {"role": "assistant", "content": response},
         ]
-        yield history, "", history
+        yield history_to_chatbot_messages(history), "", history
         return
 
     context, sources = build_journal_context(results)
     answer = answer_with_llm(prompt, context, tool="rag")
     assistant_message = build_assistant_message(answer, sources)
-    history = history + [
-        {"role": "user", "content": prompt},
-        {"role": "assistant", "content": ""},
-    ]
 
-    for updated_history in stream_text(history, assistant_message):
-        yield updated_history, "", updated_history
+    history[-1] = {"role": "assistant", "content": assistant_message}
+
+    yield history, "", history
+    # history = history + [
+    #     {"role": "user", "content": prompt},
+    #     {"role": "assistant", "content": ""},
+    # ]
+
+    # for updated_history in stream_text(history, assistant_message):
+    #     yield history_to_chatbot_messages(updated_history), "", updated_history
 
 
 def clear_assistant_chat():
-    return INITIAL_ASSISTANT_MESSAGES, "", INITIAL_ASSISTANT_MESSAGES
+    return history_to_chatbot_messages(INITIAL_ASSISTANT_MESSAGES), "", INITIAL_ASSISTANT_MESSAGES
 
 
 def clear_journal_chat():
-    return INITIAL_JOURNAL_MESSAGES, "", INITIAL_JOURNAL_MESSAGES
+    return history_to_chatbot_messages(INITIAL_JOURNAL_MESSAGES), "", INITIAL_JOURNAL_MESSAGES
 
 
 def upload_document(file_obj):
@@ -380,10 +433,10 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
                             value=INITIAL_ASSISTANT_MESSAGES,
                             height=640,
                             layout="bubble",
-                            buttons=["copy"],
                             avatar_images=(None, None),
                             label="Knowledge Copilot",
                             placeholder="Start a conversation with your knowledge assistant.",
+                            **CHATBOT_KWARGS,
                         )
                         with gr.Row():
                             assistant_msg = gr.Textbox(
@@ -406,10 +459,10 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
                             value=INITIAL_JOURNAL_MESSAGES,
                             height=580,
                             layout="bubble",
-                            buttons=["copy"],
                             avatar_images=(None, None),
                             label="Journal Reflection Chat",
                             placeholder="Ask reflective questions about your journal.",
+                            **CHATBOT_KWARGS,
                         )
                         with gr.Row():
                             journal_msg = gr.Textbox(
@@ -524,11 +577,4 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
 
 
 if __name__ == "__main__":
-    demo.launch(
-        theme=gr.themes.Soft(
-            primary_hue="blue",
-            secondary_hue="slate",
-            neutral_hue="zinc",
-        ),
-        css=CUSTOM_CSS,
-    )
+    demo.launch()
