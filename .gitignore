@@ -238,3 +238,8 @@ __pycache__/
 .vscode/launch.json
 data/
 storage/
+
+# Hugging Face demo artifacts
+storage/
+*.pkl
+*.index
