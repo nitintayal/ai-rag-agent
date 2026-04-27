@@ -32,11 +32,15 @@ INITIAL_JOURNAL_MESSAGES = [
 ]
 
 
+def make_message(role, content):
+    return {"role": role, "content": str(content)}
+
+
 def get_chatbot_kwargs():
     try:
         params = inspect.signature(gr.Chatbot.__init__).parameters
     except (TypeError, ValueError):
-        return {}, "tuples"
+        return {}, "messages"
 
     kwargs = {}
     if "type" in params:
@@ -44,7 +48,8 @@ def get_chatbot_kwargs():
     if "allow_tags" in params:
         kwargs["allow_tags"] = False
 
-    return kwargs, "messages" if "type" in kwargs else "tuples"
+    # Gradio 6 removed the explicit `type` kwarg but still expects message dictionaries.
+    return kwargs, "messages"
 
 
 CHATBOT_KWARGS, CHATBOT_FORMAT = get_chatbot_kwargs()
@@ -71,7 +76,7 @@ def build_assistant_message(answer, sources):
 def history_to_chatbot_messages(history):
     if CHATBOT_FORMAT == "messages":
         return [
-            {"role": turn.get("role"), "content": turn.get("content", "")}
+            make_message(turn.get("role"), turn.get("content", ""))
             for turn in history
             if turn.get("role") in {"user", "assistant"}
         ]
@@ -96,7 +101,7 @@ def stream_text(history, assistant_text):
     progressive = ""
     for token in assistant_text.split():
         progressive = f"{progressive} {token}".strip()
-        history[-1] = {"role": "assistant", "content": progressive}
+        history[-1] = make_message("assistant", progressive)
         yield history
 
 
@@ -115,19 +120,14 @@ def assistant_chat(message, history):
         answer = f"I hit an error while processing that request: {exc}"
         sources = []
 
-    # Replace last assistant message
-    history[-1] = {"role": "assistant", "content": answer + ("\n\nSources:\n" + format_sources(sources) if sources else "")}
+    assistant_message = build_assistant_message(answer, sources)
+    history = history + [
+        make_message("user", prompt),
+        make_message("assistant", ""),
+    ]
 
-    yield history, "", history
-
-    # assistant_message = build_assistant_message(answer, sources)
-    # history = history + [
-    #     {"role": "user", "content": prompt},
-    #     {"role": "assistant", "content": ""},
-    # ]
-
-    # for updated_history in stream_text(history, assistant_message):
-    #     yield history_to_chatbot_messages(updated_history), "", updated_history
+    for updated_history in stream_text(history, assistant_message):
+        yield history_to_chatbot_messages(updated_history), "", updated_history
 
 
 def build_journal_context(results):
@@ -155,7 +155,7 @@ def build_journal_context(results):
 def journal_chat(user_id, message, history):
     history = history or list(INITIAL_JOURNAL_MESSAGES)
     if not user_id or not user_id.strip():
-        invalid_history = history + [{"role": "assistant", "content": "Enter a user ID to chat with the journal."}]
+        invalid_history = history + [make_message("assistant", "Enter a user ID to chat with the journal.")]
         yield history_to_chatbot_messages(invalid_history), "", history
         return
     if not message or not message.strip():
@@ -166,8 +166,8 @@ def journal_chat(user_id, message, history):
     if store is None:
         response = "Journal database is unavailable. Check `JOURNAL_DATABASE_URL`."
         history = history + [
-            {"role": "user", "content": message.strip()},
-            {"role": "assistant", "content": response},
+            make_message("user", message.strip()),
+            make_message("assistant", response),
         ]
         yield history_to_chatbot_messages(history), "", history
         return
@@ -177,8 +177,8 @@ def journal_chat(user_id, message, history):
     if not results:
         response = "I couldn't find relevant journal entries for that question."
         history = history + [
-            {"role": "user", "content": prompt},
-            {"role": "assistant", "content": response},
+            make_message("user", prompt),
+            make_message("assistant", response),
         ]
         yield history_to_chatbot_messages(history), "", history
         return
@@ -186,17 +186,13 @@ def journal_chat(user_id, message, history):
     context, sources = build_journal_context(results)
     answer = answer_with_llm(prompt, context, tool="rag")
     assistant_message = build_assistant_message(answer, sources)
+    history = history + [
+        make_message("user", prompt),
+        make_message("assistant", ""),
+    ]
 
-    history[-1] = {"role": "assistant", "content": assistant_message}
-
-    yield history, "", history
-    # history = history + [
-    #     {"role": "user", "content": prompt},
-    #     {"role": "assistant", "content": ""},
-    # ]
-
-    # for updated_history in stream_text(history, assistant_message):
-    #     yield history_to_chatbot_messages(updated_history), "", updated_history
+    for updated_history in stream_text(history, assistant_message):
+        yield history_to_chatbot_messages(updated_history), "", updated_history
 
 
 def clear_assistant_chat():
@@ -430,7 +426,7 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
                 with gr.Tab("Assistant"):
                     with gr.Group(elem_classes=["chat-card"]):
                         assistant_chatbot = gr.Chatbot(
-                            value=INITIAL_ASSISTANT_MESSAGES,
+                            value=history_to_chatbot_messages(INITIAL_ASSISTANT_MESSAGES),
                             height=640,
                             layout="bubble",
                             avatar_images=(None, None),
@@ -456,7 +452,7 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
                             info="Used to scope journal search and reflection.",
                         )
                         journal_chatbot = gr.Chatbot(
-                            value=INITIAL_JOURNAL_MESSAGES,
+                            value=history_to_chatbot_messages(INITIAL_JOURNAL_MESSAGES),
                             height=580,
                             layout="bubble",
                             avatar_images=(None, None),
