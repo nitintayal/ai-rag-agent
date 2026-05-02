@@ -1,4 +1,4 @@
-from ingestion.load_documents import load_documents, load_single_file
+from ingestion.load_documents import load_documents, load_single_file, resolve_data_path
 from ingestion.chunk_documents import chunk_documents
 from embeddings.sentence_embeddings import embed_texts
 from retrieval.vector_store import VectorStore
@@ -6,6 +6,7 @@ from configs.config import settings
 
 
 def ingest_documents(single_file=None):
+    storage_dir = resolve_data_path(settings.STORAGE_DIR)
 
     print("📄 Loading documents...")
 
@@ -32,13 +33,13 @@ def ingest_documents(single_file=None):
     print("📦 Updating vector store...")
 
     try:
-        store = VectorStore.load(settings.STORAGE_DIR)
+        store = VectorStore.load(storage_dir)
         store.add(embeddings, chunks)
         store.build_bm25()
-        store.save(settings.STORAGE_DIR)
+        store.save(storage_dir)
     except Exception:
         store = VectorStore.from_vectors(embeddings, chunks)
-        store.save(settings.STORAGE_DIR)
+        store.save(storage_dir)
 
     print("✅ Ingestion complete")
     return {

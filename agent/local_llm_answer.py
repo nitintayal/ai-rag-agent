@@ -60,7 +60,8 @@ Answer:
 
 
 def answer_with_llm(question: str, context: str, tool: str = "rag") -> str:
-    print("Generating answer with LLM with Context:", context)
+    if settings.DEBUG:
+        print("Generating answer with LLM with Context:", context)
     prompt = build_answer_prompt(question, context, tool)
 
     return llm_generate(prompt, max_new_tokens=300, temperature=0).strip()
