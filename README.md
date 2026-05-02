@@ -297,7 +297,7 @@ Returns a non-streaming RAG-only response with confidence and sources.
 
 `POST /upload`
 
-Uploads a document and ingests it into the knowledge base.
+Uploads a `.txt`, `.pdf`, `.xlsx`, or `.csv` document and ingests it into the knowledge base.
 
 ### Delete Document
 

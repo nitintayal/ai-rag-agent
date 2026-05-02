@@ -25,7 +25,7 @@ from journal.schemas import (
 from journal.factory import get_journal_store
 
 DATA_FOLDER = Path(settings.DATA_DIR)
-SUPPORTED_UPLOAD_EXTENSIONS = {".txt", ".pdf", ".xlsx"}
+SUPPORTED_UPLOAD_EXTENSIONS = {".txt", ".pdf", ".xlsx", ".csv"}
 MAX_UPLOAD_BYTES = settings.MAX_UPLOAD_MB * 1024 * 1024
 
 app = FastAPI(title="Local RAG API")
