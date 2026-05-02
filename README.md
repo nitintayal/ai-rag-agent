@@ -127,6 +127,7 @@ ROUTER_PROVIDER=local
 ROUTER_MODEL=gemini-2.5-flash-lite
 GOOGLE_API_KEY=
 WEB_SEARCH_MAX_RESULTS=3
+MAX_UPLOAD_MB=15
 
 DATA_DIR=data
 STORAGE_DIR=storage
@@ -158,6 +159,13 @@ uvicorn api:app --reload --port 8000
 
 Open docs at [http://localhost:8000/docs](http://localhost:8000/docs).
 
+Useful readiness checks:
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/status
+```
+
 ### 6. Run the Gradio demo
 
 ```bash
@@ -165,6 +173,15 @@ python3 app.py
 ```
 
 This launches a ChatGPT-style Gradio UI that runs in parallel with the existing FastAPI backend path.
+The demo UI includes model/backend status, one-click prompts, safer uploads, route labels, and source lists for easier screen-recording or live sharing.
+
+### Demo smoke check
+
+Run a short route-and-answer smoke check before publishing:
+
+```bash
+python3 demo_eval.py
+```
 
 ## Journal Backends
 

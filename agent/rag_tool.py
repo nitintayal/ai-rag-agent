@@ -1,6 +1,6 @@
 from embeddings.sentence_embeddings import embed_query
 from retrieval.vector_store import VectorStore
-from ranker.cross_encoder import rerank
+from ranker.cross_encoder import rerank_with_scores
 from configs.config import settings
 
 
@@ -29,8 +29,8 @@ def format_documents_as_context(documents):
     return "\n\n".join(blocks)
 
 def run_rag(query):
-    context, sources = hybrid_search_documents(query)
-    return context, sources
+    context, sources, should_fallback = hybrid_search_documents(query)
+    return context, sources, should_fallback
 
 def search_documents(query: str):
     store = get_store()
@@ -51,22 +51,39 @@ def search_documents(query: str):
 def hybrid_search_documents(query: str):
     store = get_store()
     if store is None:
-        return "", []
+        return "", [], True
 
     query_vector = embed_query(query)
     results = store.hybrid_search(query, query_vector, k=settings.HYBRID_K)
+    strong_hybrid_results = [
+        result for result in results
+        if result["score"] >= settings.MIN_HYBRID_SCORE
+    ]
+
+    if not strong_hybrid_results:
+        return "", [], True
 
     # Extract docs
-    docs = [r["document"] for r in results]
+    docs = [r["document"] for r in strong_hybrid_results]
 
-    reranked_docs = rerank(query, docs)
+    reranked_results = rerank_with_scores(query, docs)
+    strong_reranked_results = [
+        result for result in reranked_results
+        if result["score"] >= settings.MIN_RERANK_SCORE
+    ]
 
     # Step 3: Take top-k
-    top_docs = reranked_docs[:settings.RERANK_K]
+    top_docs = [
+        result["document"]
+        for result in strong_reranked_results[:settings.RERANK_K]
+    ]
+
+    if not top_docs:
+        return "", [], True
 
 
     context = format_documents_as_context(top_docs)
 
     sources = [r["source"] for r in top_docs]
 
-    return context, sources
+    return context, sources, False

@@ -1,5 +1,4 @@
 import faiss
-from langchain_core import documents
 import numpy as np
 import pickle
 from pathlib import Path
@@ -13,6 +12,8 @@ class VectorStore:
         self.documents = documents or []
 
     def add(self, vectors, documents):
+        if self.index is None:
+            self.index = faiss.IndexFlatIP(len(vectors[0]))
         self.index.add(np.array(vectors).astype("float32"))
         self.documents.extend(documents)
 
@@ -34,6 +35,8 @@ class VectorStore:
 
         results = []
         for score, idx in zip(distances[0], indices[0]):
+            if idx < 0 or idx >= len(self.documents):
+                continue
             results.append({
                 "document": self.documents[idx],
                 "score": float(score)
@@ -84,7 +87,7 @@ class VectorStore:
             print("No vectors left")
 
             dim = self.index.d
-            self.index = faiss.IndexFlatL2(dim)
+            self.index = faiss.IndexFlatIP(dim)
 
             self.documents = []
 
@@ -94,7 +97,7 @@ class VectorStore:
 
         dim = vectors_np.shape[1]
 
-        new_index = faiss.IndexFlatL2(dim)
+        new_index = faiss.IndexFlatIP(dim)
 
         new_index.add(vectors_np)
 
@@ -116,9 +119,11 @@ class VectorStore:
 
         vector_results = []
         for idx, score in zip(I[0], D[0]):
+            if idx < 0 or idx >= len(self.documents):
+                continue
             vector_results.append({
                 "doc": self.documents[idx],
-                "score": 1 / (1 + score)   # convert distance → similarity
+                "score": float(score)
             })
 
         # 2️⃣ BM25 search
@@ -134,8 +139,13 @@ class VectorStore:
 
         # 3️⃣ Normalize scores
         def normalize(scores):
-            max_score = max(scores) if scores else 1
-            return [s / max_score for s in scores]
+            if not scores:
+                return []
+            min_score = min(scores)
+            max_score = max(scores)
+            if max_score == min_score:
+                return [1.0 for _ in scores]
+            return [(s - min_score) / (max_score - min_score) for s in scores]
 
         vec_scores = normalize([r["score"] for r in vector_results])
         bm_scores = normalize([r["score"] for r in bm25_results])

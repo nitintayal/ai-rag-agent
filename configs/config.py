@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     BM25_WEIGHT: float
     HYBRID_K: int
     RERANK_K: int
+    MIN_HYBRID_SCORE: float = 0.0
+    MIN_RERANK_SCORE: float = -9999.0
 
     ENABLE_RERANK: bool
     ENABLE_HYBRID: bool
@@ -47,6 +49,7 @@ class Settings(BaseSettings):
     # =========================
     STREAM_DELAY: float
     API_PORT: int
+    MAX_UPLOAD_MB: int = 15
 
     # =========================
     # Storage

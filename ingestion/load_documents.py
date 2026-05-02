@@ -82,7 +82,7 @@ def load_documents(data_dir: str):
                 # Extract text from all pages
                 full_text = ""
                 for page_num, page in enumerate(pdf_reader.pages):
-                    text = page.extract_text()
+                    text = page.extract_text() or ""
                     full_text += f"\n[Page {page_num + 1}]\n{text}"
                 
                 documents.append({
@@ -101,7 +101,9 @@ def load_single_file(file_path: str):
         print(f"⚠️ File '{file_path}' not found.")
         return None
 
-    if file_path.suffix == ".txt":
+    suffix = file_path.suffix.lower()
+
+    if suffix == ".txt":
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
             print(f"✅ Loaded: {file_path.name}")
@@ -109,7 +111,7 @@ def load_single_file(file_path: str):
                 "source": file_path.name,
                 "content": content
             }]
-    elif file_path.suffix == ".xlsx":
+    elif suffix == ".xlsx":
         workbook = openpyxl.load_workbook(file_path)
         sheet = workbook.active
         content = "\n".join(
@@ -121,13 +123,13 @@ def load_single_file(file_path: str):
             "source": file_path.name,
             "content": content
         }]
-    elif file_path.suffix == ".pdf":
+    elif suffix == ".pdf":
         try:
             with open(file_path, "rb") as f:
                 pdf_reader = PdfReader(f)
                 full_text = ""
                 for page_num, page in enumerate(pdf_reader.pages):
-                    text = page.extract_text()
+                    text = page.extract_text() or ""
                     full_text += f"\n[Page {page_num + 1}]\n{text}"
                 print(f"✅ Loaded: {file_path.name}")
                 return [{

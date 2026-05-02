@@ -4,6 +4,13 @@ from configs.config import settings
 model = CrossEncoder(settings.RERANK_MODEL)
 
 def rerank(query, docs):
+    ranked = rerank_with_scores(query, docs)
+    return [item["document"] for item in ranked]
+
+
+def rerank_with_scores(query, docs):
+    if not docs:
+        return []
 
     pairs = [(query, d["content"]) for d in docs]
 
@@ -15,9 +22,15 @@ def rerank(query, docs):
         print(f"{score:.4f} → {doc['content'][:80]}")
 
     ranked = sorted(
-        zip(docs, scores),
-        key=lambda x: x[1],
+        (
+            {
+                "document": doc,
+                "score": float(score),
+            }
+            for doc, score in zip(docs, scores)
+        ),
+        key=lambda x: x["score"],
         reverse=True
     )
 
-    return [r[0] for r in ranked]
+    return ranked

@@ -1,4 +1,5 @@
 import inspect
+import re
 import shutil
 from pathlib import Path
 
@@ -16,6 +17,19 @@ APP_TITLE = "AI RAG Agent"
 APP_SUBTITLE = "A ChatGPT-style demo for knowledge-base chat, live web routing, and journal reflection."
 DATA_FOLDER = Path(settings.DATA_DIR)
 SUPPORTED_UPLOAD_EXTENSIONS = {".txt", ".pdf", ".xlsx"}
+MAX_UPLOAD_BYTES = settings.MAX_UPLOAD_MB * 1024 * 1024
+
+ASSISTANT_EXAMPLES = [
+    "Summarize the uploaded knowledge base.",
+    "What are the most important facts in my documents?",
+    "What is the latest news about AI agents?",
+]
+
+JOURNAL_EXAMPLES = [
+    "What patterns do you see in my recent entries?",
+    "When did I last feel productive?",
+    "Summarize my mood across these entries.",
+]
 
 INITIAL_ASSISTANT_MESSAGES = [
     {
@@ -66,11 +80,72 @@ def get_safe_journal_store():
 def format_sources(sources):
     if not sources:
         return "No sources returned."
-    return "\n".join(f"- {source}" for source in sources)
+    formatted = []
+    for source in sources:
+        source = str(source)
+        if source.startswith(("http://", "https://")):
+            formatted.append(f"- [{source}]({source})")
+        else:
+            formatted.append(f"- `{source}`")
+    return "\n".join(formatted)
 
 
-def build_assistant_message(answer, sources):
-    return f"{answer}\n\nSources\n{format_sources(sources)}"
+def build_assistant_message(answer, sources, route=None):
+    route_label = {
+        "rag": "Knowledge Base",
+        "web": "Web Search",
+        "journal": "Journal",
+    }.get(route, route or "Unknown")
+    return f"{answer}\n\nRoute: **{route_label}**\n\nSources\n{format_sources(sources)}"
+
+
+def sanitize_filename(filename):
+    name = Path(filename or "").name
+    name = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._")
+    if not name:
+        raise ValueError("Invalid filename.")
+    return name
+
+
+def unique_destination(filename):
+    safe_name = sanitize_filename(filename)
+    destination = DATA_FOLDER / safe_name
+    if not destination.exists():
+        return destination
+
+    stem = destination.stem
+    suffix = destination.suffix
+    for counter in range(1, 1000):
+        candidate = DATA_FOLDER / f"{stem}_{counter}{suffix}"
+        if not candidate.exists():
+            return candidate
+    raise ValueError("Could not create a unique filename.")
+
+
+def get_demo_status():
+    lines = [
+        f"LLM: `{settings.LLM_MODEL}`",
+        f"Router: `{settings.ROUTER_PROVIDER}`",
+        f"Journal: `{settings.JOURNAL_BACKEND}`",
+        f"Web results: `{settings.WEB_SEARCH_MAX_RESULTS}`",
+    ]
+
+    try:
+        from retrieval.vector_store import VectorStore
+
+        store = VectorStore.load(settings.STORAGE_DIR)
+        lines.append(f"Knowledge base: `{len(store.documents)}` chunks")
+    except Exception:
+        lines.append("Knowledge base: `not loaded`")
+
+    try:
+        store = get_journal_store()
+        lines.append("Journal store: `connected`")
+        del store
+    except Exception:
+        lines.append("Journal store: `unavailable`")
+
+    return "\n".join(f"- {line}" for line in lines)
 
 
 def history_to_chatbot_messages(history):
@@ -116,11 +191,13 @@ def assistant_chat(message, history):
         result = run_agent(prompt)
         answer = str(result.get("answer", "")).strip() or "I couldn't generate a response."
         sources = result.get("sources") or []
+        route = result.get("tool")
     except Exception as exc:
-        answer = f"I hit an error while processing that request: {exc}"
+        answer = "I hit an error while processing that request. Check the app logs for details."
         sources = []
+        route = "error"
 
-    assistant_message = build_assistant_message(answer, sources)
+    assistant_message = build_assistant_message(answer, sources, route)
     history = history + [
         make_message("user", prompt),
         make_message("assistant", ""),
@@ -185,7 +262,7 @@ def journal_chat(user_id, message, history):
 
     context, sources = build_journal_context(results)
     answer = answer_with_llm(prompt, context, tool="rag")
-    assistant_message = build_assistant_message(answer, sources)
+    assistant_message = build_assistant_message(answer, sources, "journal")
     history = history + [
         make_message("user", prompt),
         make_message("assistant", ""),
@@ -210,12 +287,25 @@ def upload_document(file_obj):
     source_path = Path(file_obj)
     if source_path.suffix.lower() not in SUPPORTED_UPLOAD_EXTENSIONS:
         return "Unsupported file type. Use `.txt`, `.pdf`, or `.xlsx`."
+    if source_path.stat().st_size > MAX_UPLOAD_BYTES:
+        return f"File is too large. Limit is {settings.MAX_UPLOAD_MB} MB."
 
     DATA_FOLDER.mkdir(parents=True, exist_ok=True)
-    destination = DATA_FOLDER / source_path.name
+    try:
+        destination = unique_destination(source_path.name)
+    except ValueError as exc:
+        return str(exc)
+
     shutil.copy(source_path, destination)
-    ingest_documents(str(destination))
-    return f"Ingested `{destination.name}` into the knowledge base."
+    result = ingest_documents(str(destination)) or {}
+    chunks = result.get("chunks", 0)
+    documents = result.get("documents", 0)
+    return (
+        f"Ingested `{destination.name}` into the knowledge base.\n\n"
+        f"- Documents: `{documents}`\n"
+        f"- Chunks: `{chunks}`\n"
+        "- Try: `Summarize the uploaded knowledge base.`"
+    )
 
 
 def create_journal_entry(user_id, title, content, mood, tags, entry_date):
@@ -442,6 +532,10 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
                                 show_label=False,
                             )
                             assistant_send = gr.Button("Send", variant="primary", scale=1, elem_classes=["compact-button"])
+                        with gr.Row():
+                            assistant_example_1 = gr.Button("Summarize KB", elem_classes=["compact-button"])
+                            assistant_example_2 = gr.Button("Key facts", elem_classes=["compact-button"])
+                            assistant_example_3 = gr.Button("Latest AI agents", elem_classes=["compact-button"])
                         assistant_clear = gr.Button("New chat")
 
                 with gr.Tab("Journal Copilot"):
@@ -468,9 +562,18 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
                                 show_label=False,
                             )
                             journal_send = gr.Button("Send", variant="primary", scale=1, elem_classes=["compact-button"])
+                        with gr.Row():
+                            journal_example_1 = gr.Button("Recent patterns", elem_classes=["compact-button"])
+                            journal_example_2 = gr.Button("Last productive", elem_classes=["compact-button"])
+                            journal_example_3 = gr.Button("Mood summary", elem_classes=["compact-button"])
                         journal_clear = gr.Button("New journal chat")
 
         with gr.Column(scale=4):
+            with gr.Group(elem_classes=["side-card"]):
+                gr.HTML('<div class="section-title">Demo Status</div>')
+                status_output = gr.Markdown(get_demo_status(), elem_classes=["soft-note"])
+                status_refresh = gr.Button("Refresh status", variant="secondary", elem_classes=["compact-button"])
+
             with gr.Group(elem_classes=["side-card"]):
                 gr.HTML('<div class="section-title">Knowledge Base</div>')
                 gr.Markdown("Upload a file to extend retrieval context for the assistant.")
@@ -525,6 +628,9 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
         fn=clear_assistant_chat,
         outputs=[assistant_chatbot, assistant_msg, assistant_state],
     )
+    assistant_example_1.click(lambda: ASSISTANT_EXAMPLES[0], outputs=assistant_msg)
+    assistant_example_2.click(lambda: ASSISTANT_EXAMPLES[1], outputs=assistant_msg)
+    assistant_example_3.click(lambda: ASSISTANT_EXAMPLES[2], outputs=assistant_msg)
 
     journal_send.click(
         fn=journal_chat,
@@ -540,8 +646,12 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
         fn=clear_journal_chat,
         outputs=[journal_chatbot, journal_msg, journal_state],
     )
+    journal_example_1.click(lambda: JOURNAL_EXAMPLES[0], outputs=journal_msg)
+    journal_example_2.click(lambda: JOURNAL_EXAMPLES[1], outputs=journal_msg)
+    journal_example_3.click(lambda: JOURNAL_EXAMPLES[2], outputs=journal_msg)
 
     upload_btn.click(fn=upload_document, inputs=upload, outputs=upload_status)
+    status_refresh.click(fn=get_demo_status, outputs=status_output)
     journal_save.click(
         fn=create_journal_entry,
         inputs=[journal_user_id, journal_title, journal_content, journal_mood, journal_tags, journal_date],
