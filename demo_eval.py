@@ -8,7 +8,7 @@ DEMO_QUESTIONS = [
     "What is the latest news about AI agents?",
 ]
 
-
+# Main function to run the agent on demo questions
 def main():
     for index, question in enumerate(DEMO_QUESTIONS, start=1):
         print(f"\n[{index}] {question}")
