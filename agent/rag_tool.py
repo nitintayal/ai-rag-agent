@@ -3,6 +3,18 @@ from retrieval.vector_store import VectorStore
 from ranker.cross_encoder import rerank_with_scores
 from configs.config import settings
 
+SUMMARY_INTENT_TERMS = ("summarize", "summary", "overview", "key points", "main points")
+DOCUMENT_SCOPE_TERMS = (
+    "uploaded",
+    "upload",
+    "document",
+    "documents",
+    "file",
+    "files",
+    "knowledge base",
+    "kb",
+)
+
 
 def get_store():
     try:
@@ -10,6 +22,47 @@ def get_store():
     except Exception as exc:
         print(f"RAG store unavailable: {exc}")
         return None
+
+
+def is_document_summary_query(query: str) -> bool:
+    normalized = query.lower()
+    return (
+        any(term in normalized for term in SUMMARY_INTENT_TERMS)
+        and any(term in normalized for term in DOCUMENT_SCOPE_TERMS)
+    )
+
+
+def get_source(document):
+    return str(document.get("source", "unknown"))
+
+
+def unique_sources(documents):
+    sources = []
+    seen = set()
+    for document in documents:
+        source = get_source(document)
+        if source not in seen:
+            sources.append(source)
+            seen.add(source)
+    return sources
+
+
+def get_summary_documents(store, query: str):
+    documents = store.documents or []
+    if not documents:
+        return []
+
+    normalized = query.lower()
+    if "upload" in normalized:
+        latest_source = get_source(documents[-1])
+        scoped_documents = [
+            document for document in documents
+            if get_source(document) == latest_source
+        ]
+    else:
+        scoped_documents = documents
+
+    return scoped_documents[:settings.RERANK_K]
 
 
 def format_documents_as_context(documents):
@@ -52,6 +105,15 @@ def hybrid_search_documents(query: str):
     store = get_store()
     if store is None:
         return "", [], True
+
+    if is_document_summary_query(query):
+        top_docs = get_summary_documents(store, query)
+        if not top_docs:
+            return "", [], True
+
+        context = format_documents_as_context(top_docs)
+        sources = unique_sources(top_docs)
+        return context, sources, False
 
     query_vector = embed_query(query)
     results = store.hybrid_search(query, query_vector, k=settings.HYBRID_K)
