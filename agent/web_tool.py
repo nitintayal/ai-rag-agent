@@ -36,6 +36,7 @@ def fetch_page_content(url: str) -> str:
             response.raise_for_status()
     except Exception as exc:
         print(f"Failed to fetch page content: {exc}")
+        return ""
 
     text = trafilatura.extract(response.text) or extract_text_from_html(response.text)
     return text[:4000]
@@ -43,7 +44,11 @@ def fetch_page_content(url: str) -> str:
 
 def web_search_tool(query):
     print("\n🧠 Tool selected: Web Search")
-    results = list(DDGS().text(query, max_results=settings.WEB_SEARCH_MAX_RESULTS))
+    try:
+        results = list(DDGS().text(query, max_results=settings.WEB_SEARCH_MAX_RESULTS))
+    except Exception as exc:
+        print(f"Web search failed: {exc}")
+        return {"context": "", "sources": []}
 
     hrefs = [r.get("href", "").strip() for r in results]
     page_contents = {}

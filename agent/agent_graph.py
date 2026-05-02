@@ -12,9 +12,19 @@ from agent.agent_state import AgentState
 # ===============================
 def rag_search_tool(state: AgentState):
     print("\n🧠 Tool selected: RAG Search")
-    context, sources = run_rag(state["question"])
+    context, sources, should_fallback = run_rag(state["question"])
+
+    if should_fallback or not context:
+        print("\n↪️ RAG confidence too low, falling back to Web Search")
+        result = web_search_tool(state["question"])
+        return {
+            "tool": "web",
+            "context": result.get("context", ""),
+            "sources": result.get("sources", [])
+        }
 
     return {
+        "tool": "rag",
         "context": context,
         "sources": sources
     }

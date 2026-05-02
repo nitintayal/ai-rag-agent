@@ -13,7 +13,7 @@ def ingest_documents(single_file=None):
 
     if not doc:
         print("⚠️ No documents found to ingest.")
-        return
+        return {"documents": 0, "chunks": 0, "status": "empty"}
 
     print(f"Loaded {len(doc)} documents")
 
@@ -41,3 +41,9 @@ def ingest_documents(single_file=None):
         store.save(settings.STORAGE_DIR)
 
     print("✅ Ingestion complete")
+    return {
+        "documents": len(doc),
+        "chunks": len(chunks),
+        "status": "ok",
+        "sources": sorted({str(item["source"]) for item in doc}),
+    }
