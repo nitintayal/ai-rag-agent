@@ -4,9 +4,23 @@ from pathlib import Path
 import openpyxl
 from pypdf import PdfReader
 
+
+def resolve_data_path(data_dir: str):
+    data_path = Path(data_dir)
+    if data_path.exists():
+        return data_path
+
+    if data_path.is_absolute() and len(data_path.parts) > 2 and data_path.parts[1] == "data":
+        local_path = Path("data").joinpath(*data_path.parts[2:])
+        if local_path.exists():
+            return local_path
+
+    return data_path
+
+
 def load_text(folder_path: str):
     documents = []
-    folder = Path(folder_path)
+    folder = resolve_data_path(folder_path)
     for file in folder.glob("*.txt"):
         with open(file, "r", encoding="utf-8") as f:
             content = f.read()
@@ -41,7 +55,7 @@ def load_documents(data_dir: str):
     Supports: .txt, .xlsx, .pdf
     """
     documents = []
-    data_path = Path(data_dir)
+    data_path = resolve_data_path(data_dir)
 
     if not data_path.exists():
         print(f"⚠️ Data directory '{data_dir}' not found. Creating...")

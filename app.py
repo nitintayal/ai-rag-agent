@@ -9,13 +9,14 @@ from agent.agent_executor import run_agent
 from agent.local_llm_answer import answer_with_llm
 from configs.config import settings
 from ingestion.ingest_documents import ingest_documents
+from ingestion.load_documents import resolve_data_path
 from journal.schemas import JournalEntryCreate, JournalEntryUpdate
 from journal.factory import get_journal_store
+from retrieval.vector_store import VectorStore
 
 
 APP_TITLE = "AI RAG Agent"
 APP_SUBTITLE = "A ChatGPT-style demo for knowledge-base chat, live web routing, and journal reflection."
-DATA_FOLDER = Path(settings.DATA_DIR)
 SUPPORTED_UPLOAD_EXTENSIONS = {".txt", ".pdf", ".xlsx"}
 MAX_UPLOAD_BYTES = settings.MAX_UPLOAD_MB * 1024 * 1024
 
@@ -77,6 +78,57 @@ def get_safe_journal_store():
         return None
 
 
+def get_effective_data_folder():
+    return resolve_data_path(settings.DATA_DIR)
+
+
+def get_effective_storage_folder():
+    storage_path = Path(settings.STORAGE_DIR)
+    if storage_path.exists():
+        return storage_path
+
+    if storage_path.is_absolute() and len(storage_path.parts) > 2 and storage_path.parts[1] == "data":
+        local_path = Path("data").joinpath(*storage_path.parts[2:])
+        if local_path.exists():
+            return local_path
+
+    return storage_path
+
+
+def has_indexed_documents():
+    try:
+        store = VectorStore.load(get_effective_storage_folder())
+    except Exception:
+        return False
+    return bool(store.documents)
+
+
+def has_ingestable_files():
+    data_folder = get_effective_data_folder()
+    if not data_folder.exists():
+        return False
+    return any(
+        path.is_file() and path.suffix.lower() in SUPPORTED_UPLOAD_EXTENSIONS
+        for path in data_folder.iterdir()
+    )
+
+
+def ensure_knowledge_base_index():
+    if has_indexed_documents():
+        return "Knowledge base index is ready."
+
+    if not has_ingestable_files():
+        return "No knowledge base index found, and no `.txt`, `.pdf`, or `.xlsx` files are available to ingest."
+
+    result = ingest_documents() or {}
+    chunks = result.get("chunks", 0)
+    documents = result.get("documents", 0)
+    if result.get("status") == "ok" and chunks:
+        return f"Built knowledge base index from current files: {documents} documents, {chunks} chunks."
+
+    return "Tried to build the knowledge base index, but no chunks were created."
+
+
 def format_sources(sources):
     if not sources:
         return "No sources returned."
@@ -109,14 +161,14 @@ def sanitize_filename(filename):
 
 def unique_destination(filename):
     safe_name = sanitize_filename(filename)
-    destination = DATA_FOLDER / safe_name
+    destination = get_effective_data_folder() / safe_name
     if not destination.exists():
         return destination
 
     stem = destination.stem
     suffix = destination.suffix
     for counter in range(1, 1000):
-        candidate = DATA_FOLDER / f"{stem}_{counter}{suffix}"
+        candidate = get_effective_data_folder() / f"{stem}_{counter}{suffix}"
         if not candidate.exists():
             return candidate
     raise ValueError("Could not create a unique filename.")
@@ -131,9 +183,7 @@ def get_demo_status():
     ]
 
     try:
-        from retrieval.vector_store import VectorStore
-
-        store = VectorStore.load(settings.STORAGE_DIR)
+        store = VectorStore.load(get_effective_storage_folder())
         lines.append(f"Knowledge base: `{len(store.documents)}` chunks")
     except Exception:
         lines.append("Knowledge base: `not loaded`")
@@ -146,6 +196,11 @@ def get_demo_status():
         lines.append("Journal store: `unavailable`")
 
     return "\n".join(f"- {line}" for line in lines)
+
+
+def prepare_demo_on_load():
+    index_message = ensure_knowledge_base_index()
+    return get_demo_status(), index_message
 
 
 def history_to_chatbot_messages(history):
@@ -290,7 +345,7 @@ def upload_document(file_obj):
     if source_path.stat().st_size > MAX_UPLOAD_BYTES:
         return f"File is too large. Limit is {settings.MAX_UPLOAD_MB} MB."
 
-    DATA_FOLDER.mkdir(parents=True, exist_ok=True)
+    get_effective_data_folder().mkdir(parents=True, exist_ok=True)
     try:
         destination = unique_destination(source_path.name)
     except ValueError as exc:
@@ -652,6 +707,7 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
 
     upload_btn.click(fn=upload_document, inputs=upload, outputs=upload_status)
     status_refresh.click(fn=get_demo_status, outputs=status_output)
+    demo.load(fn=prepare_demo_on_load, outputs=[status_output, upload_status])
     journal_save.click(
         fn=create_journal_entry,
         inputs=[journal_user_id, journal_title, journal_content, journal_mood, journal_tags, journal_date],
