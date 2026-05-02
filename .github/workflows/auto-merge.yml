@@ -20,7 +20,7 @@ jobs:
           git config --global user.name "nitintayal"
           git config --global user.email "er.ntayal@gmail.com"
           git checkout main
-          git merge hf-main --no-ff
+          git merge hf-main --no-ff --allow-unrelated-histories
           git checkout main -- .env
           git add .env
           git diff --staged --quiet || git commit -m "Keep .env from main branch"
