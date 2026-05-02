@@ -18,7 +18,7 @@ jobs:
       - name: Merge hf-main into main
         run: |
           git config --global user.name "nitintayal"
-          git config --global user.email "er.ntayal@gmail.com
+          git config --global user.email "er.ntayal@gmail.com"
           git checkout main
           git merge hf-main --no-ff
           git checkout main -- .env
