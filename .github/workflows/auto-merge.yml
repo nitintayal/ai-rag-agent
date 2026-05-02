@@ -1,0 +1,27 @@
+name: Auto-merge hf-main to main
+
+on:
+  push:
+    branches:
+      - hf-main
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge hf-main into main
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git checkout main
+          git merge hf-main --no-ff
+          git checkout main -- .env
+          git add .env
+          git diff --staged --quiet || git commit -m "Keep .env from main branch"
+          git push origin main
