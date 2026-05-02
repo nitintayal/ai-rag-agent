@@ -17,7 +17,7 @@ from retrieval.vector_store import VectorStore
 
 APP_TITLE = "AI RAG Agent"
 APP_SUBTITLE = "A ChatGPT-style demo for knowledge-base chat, live web routing, and journal reflection."
-SUPPORTED_UPLOAD_EXTENSIONS = {".txt", ".pdf", ".xlsx"}
+SUPPORTED_UPLOAD_EXTENSIONS = {".txt", ".pdf", ".xlsx", ".csv"}
 MAX_UPLOAD_BYTES = settings.MAX_UPLOAD_MB * 1024 * 1024
 
 ASSISTANT_EXAMPLES = [
@@ -118,7 +118,7 @@ def ensure_knowledge_base_index():
         return "Knowledge base index is ready."
 
     if not has_ingestable_files():
-        return "No knowledge base index found, and no `.txt`, `.pdf`, or `.xlsx` files are available to ingest."
+        return "No knowledge base index found, and no `.txt`, `.pdf`, `.xlsx`, or `.csv` files are available to ingest."
 
     result = ingest_documents() or {}
     chunks = result.get("chunks", 0)
@@ -337,11 +337,11 @@ def clear_journal_chat():
 
 def upload_document(file_obj):
     if file_obj is None:
-        return "Choose a `.txt`, `.pdf`, or `.xlsx` file to ingest."
+        return "Choose a `.txt`, `.pdf`, `.xlsx`, or `.csv` file to ingest."
 
     source_path = Path(file_obj)
     if source_path.suffix.lower() not in SUPPORTED_UPLOAD_EXTENSIONS:
-        return "Unsupported file type. Use `.txt`, `.pdf`, or `.xlsx`."
+        return "Unsupported file type. Use `.txt`, `.pdf`, `.xlsx`, or `.csv`."
     if source_path.stat().st_size > MAX_UPLOAD_BYTES:
         return f"File is too large. Limit is {settings.MAX_UPLOAD_MB} MB."
 
@@ -634,7 +634,7 @@ with gr.Blocks(title=APP_TITLE, fill_height=True, fill_width=True) as demo:
                 gr.Markdown("Upload a file to extend retrieval context for the assistant.")
                 upload = gr.File(
                     label="Document",
-                    file_types=[".txt", ".pdf", ".xlsx"],
+                    file_types=[".txt", ".pdf", ".xlsx", ".csv"],
                     type="filepath",
                 )
                 upload_btn = gr.Button("Ingest document", variant="secondary", elem_classes=["compact-button"])

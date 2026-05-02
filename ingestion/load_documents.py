@@ -49,10 +49,30 @@ def load_xlsx(file_path):
     print(f"✅ Loaded {len(chunks)} rows from {file_path}")
     return chunks
 
+
+def load_csv(file_path):
+    df = pd.read_csv(file_path)
+
+    chunks = []
+    for idx, row in df.iterrows():
+        row_text = ". ".join(
+            f"{col}: {row[col]}"
+            for col in df.columns
+            if pd.notna(row[col])
+        )
+
+        if row_text.strip():
+            chunks.append({
+                "source": f"{Path(file_path).name}#row-{idx + 1}",
+                "content": row_text
+            })
+    print(f"✅ Loaded {len(chunks)} rows from {file_path}")
+    return chunks
+
 def load_documents(data_dir: str):
     """
     Load documents from data directory.
-    Supports: .txt, .xlsx, .pdf
+    Supports: .txt, .xlsx, .csv, .pdf
     """
     documents = []
     data_path = resolve_data_path(data_dir)
@@ -86,6 +106,13 @@ def load_documents(data_dir: str):
                 "content": content
             })
         print(f"✅ Loaded: {xlsx_file.name}")
+
+    # ---- Load .csv files ----
+    for csv_file in data_path.glob("*.csv"):
+        try:
+            documents.extend(load_csv(csv_file))
+        except Exception as e:
+            print(f"❌ Error loading {csv_file.name}: {e}")
 
     # ---- Load .pdf files (NEW) ----
     for pdf_file in data_path.glob("*.pdf"):
@@ -137,6 +164,8 @@ def load_single_file(file_path: str):
             "source": file_path.name,
             "content": content
         }]
+    elif suffix == ".csv":
+        return load_csv(file_path)
     elif suffix == ".pdf":
         try:
             with open(file_path, "rb") as f:
