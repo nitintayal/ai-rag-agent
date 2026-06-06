@@ -1,5 +1,7 @@
 from pathlib import Path
+from typing import Optional
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -57,7 +59,7 @@ class Settings(BaseSettings):
     DATA_DIR: str = _hf_default_path("data", "data")
     STORAGE_DIR: str = _hf_default_path("storage", "storage")
     JOURNAL_BACKEND: str = "postgres"
-    JOURNAL_DATABASE_URL: str
+    JOURNAL_DATABASE_URL: Optional[str] = None
     JOURNAL_SQLITE_PATH: str = _hf_default_path("journal_demo.db", "journal_demo.db")
 
     # =========================
@@ -66,6 +68,13 @@ class Settings(BaseSettings):
     DEBUG: bool
     SHOW_RETRIEVED: bool
     SHOW_RERANKED: bool
+
+    @model_validator(mode="after")
+    def validate_journal_settings(self):
+        backend = self.JOURNAL_BACKEND.strip().lower()
+        if backend == "postgres" and not self.JOURNAL_DATABASE_URL:
+            raise ValueError("JOURNAL_DATABASE_URL is required when JOURNAL_BACKEND=postgres")
+        return self
 
     class Config:
         env_file = ".env"

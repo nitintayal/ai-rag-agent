@@ -7,7 +7,6 @@ import numpy as np
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-from embeddings.sentence_embeddings import embed_query
 from journal.schemas import JournalEntryCreate, JournalEntryUpdate
 
 
@@ -105,6 +104,8 @@ class PostgresJournalStore:
         return self._serialize_row(row) if row else None
 
     def add_entry(self, payload: JournalEntryCreate) -> Dict:
+        from embeddings.sentence_embeddings import embed_query
+
         now = datetime.now(timezone.utc)
         entry_date = payload.entry_date or date.today()
         entry_id = str(uuid4())
@@ -149,6 +150,8 @@ class PostgresJournalStore:
     def update_entry(
         self, entry_id: str, user_id: str, payload: JournalEntryUpdate
     ) -> Optional[Dict]:
+        from embeddings.sentence_embeddings import embed_query
+
         current_entry = self.get_entry(entry_id=entry_id, user_id=user_id)
         if current_entry is None:
             return None
@@ -203,6 +206,8 @@ class PostgresJournalStore:
         return deleted
 
     def search_entries(self, user_id: str, query: str, k: int = 5) -> List[Dict]:
+        from embeddings.sentence_embeddings import embed_query
+
         select_sql = """
         SELECT id, user_id, title, content, mood, tags, entry_date, embedding, created_at, updated_at
         FROM journal_entries

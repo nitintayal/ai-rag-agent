@@ -1,43 +1,43 @@
 from langgraph.graph import StateGraph, END
 
-from agent.rag_tool import run_rag
 from agent.local_llm_answer import answer_with_llm, decide_llm_tool
-from agent.web_tool import web_search_tool
 from agent.agent_state import AgentState
+from mcp_servers.client.mcp_client import search_documents, search_web
 
 
 
 # ===============================
-# Retrieval Node
+# MCP Tool Node
 # ===============================
-def rag_search_tool(state: AgentState):
-    print("\n🧠 Tool selected: RAG Search")
-    context, sources, should_fallback = run_rag(state["question"])
+def mcp_executor(state: AgentState):
+    tool = state.get("tool", "rag")
+    question = state["question"]
 
-    if should_fallback or not context:
-        print("\n↪️ RAG confidence too low, falling back to Web Search")
-        result = web_search_tool(state["question"])
+    if tool == "web":
+        print("\n🧠 MCP server selected: Web")
+        result = search_web(question)
         return {
             "tool": "web",
             "context": result.get("context", ""),
-            "sources": result.get("sources", [])
+            "sources": result.get("sources", []),
         }
 
-    return {
-        "tool": "rag",
-        "context": context,
-        "sources": sources
-    }
+    print("\n🧠 MCP server selected: RAG")
+    result = search_documents(question)
+    context = result.get("context", "")
+    sources = result.get("sources", [])
+    should_fallback = result.get("should_fallback", False)
 
+    if should_fallback or not context:
+        print("\n↪️ RAG confidence too low, falling back to MCP Web")
+        web_result = search_web(question)
+        return {
+            "tool": "web",
+            "context": web_result.get("context", ""),
+            "sources": web_result.get("sources", []),
+        }
 
-def web_search_node(state: AgentState):
-    print("\n🧠 Tool selected: Web Search")
-    result = web_search_tool(state["question"])
-
-    return {
-        "context": result.get("context", ""),
-        "sources": result.get("sources", [])
-    }
+    return {"tool": "rag", "context": context, "sources": sources}
 
 
 # ===============================
@@ -65,20 +65,18 @@ def generate(state: AgentState):
 builder = StateGraph(AgentState)
 
 builder.add_node("decide", decide_llm_tool)
-builder.add_node("rag", rag_search_tool)
-builder.add_node("web", web_search_node)
+builder.add_node("tool_executor", mcp_executor)
 builder.add_node("generate", generate)
 
 builder.add_conditional_edges(
     "decide",
     lambda state: state["tool"],
     {
-        "rag": "rag",
-        "web": "web"
+        "rag": "tool_executor",
+        "web": "tool_executor",
     }
 )
-builder.add_edge("rag", "generate")
-builder.add_edge("web", "generate")
+builder.add_edge("tool_executor", "generate")
 
 builder.set_entry_point("decide")
 builder.set_finish_point("generate")

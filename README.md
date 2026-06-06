@@ -1,13 +1,3 @@
----
-title: AI RAG Agent Demo
-emoji: 💬
-colorFrom: yellow
-colorTo: blue
-sdk: gradio
-sdk_version: 6.13.0
-app_file: app.py
-pinned: false
----
 
 # AI RAG Agent
 
@@ -31,6 +21,7 @@ Agentic RAG system built with FastAPI, LangGraph, hybrid retrieval, local Huggin
 - Cross-encoder reranking
 - Local answer generation with Hugging Face models
 - Optional structured router using Gemini JSON/schema output
+- MCP-backed RAG, web, and journal tool servers
 - Web search with source URL capture
 - Journal CRUD + semantic search
 - Parallel deployment paths for FastAPI and Gradio
@@ -43,8 +34,9 @@ User Question
   -> FastAPI
   -> LangGraph Agent
      -> Decide Tool
-        -> RAG Tool
-        -> Web Tool
+        -> MCP Tool Executor
+           -> RAG MCP Server
+           -> Web MCP Server
   -> Answer Generation
   -> Streamed Answer + Sources
 ```
@@ -54,18 +46,20 @@ User Question
 ### RAG path
 
 1. Query is embedded.
-2. Hybrid retrieval runs across vector + BM25 search.
-3. Results are reranked.
-4. Top documents become context.
-5. Local LLM generates the grounded answer.
+2. LangGraph calls the RAG MCP server through the MCP stdio client.
+3. Hybrid retrieval runs across vector + BM25 search.
+4. Results are reranked.
+5. Top documents become context.
+6. Local LLM generates the grounded answer.
 
 ### Web path
 
 1. Router selects `web`.
-2. DDGS fetches search results.
-3. Titles, URLs, and snippets are converted into context.
-4. The answer model responds using that web context.
-5. Source URLs are streamed back as a normal serialized list.
+2. LangGraph calls the web MCP server through the MCP stdio client.
+3. DDGS fetches search results.
+4. Titles, URLs, and snippets are converted into context.
+5. The answer model responds using that web context.
+6. Source URLs are streamed back as a normal serialized list.
 
 ## Project Structure
 
@@ -89,6 +83,14 @@ ai-rag-agent/
 │   ├── schemas.py
 │   ├── sqlite_store.py
 │   └── store.py
+├── mcp_servers/
+│   ├── client/
+│   │   └── mcp_client.py
+│   ├── servers/
+│   │   ├── journal_server.py
+│   │   ├── rag_server.py
+│   │   └── web_server.py
+│   └── servers.json
 ├── retrieval/
 ├── app.py
 ├── api.py
@@ -174,6 +176,37 @@ python3 app.py
 
 This launches a ChatGPT-style Gradio UI that runs in parallel with the existing FastAPI backend path.
 The demo UI includes model/backend status, one-click prompts, safer uploads, route labels, and source lists for easier screen-recording or live sharing.
+
+## MCP Servers
+
+The LangGraph agent uses MCP over stdio for tool execution. The router still chooses `rag` or `web`, then `agent/agent_graph.py` calls the MCP tool executor:
+
+- `rag`: `search_documents` in `mcp_servers/servers/rag_server.py`
+- `web`: `search_web` in `mcp_servers/servers/web_server.py`
+- `journal`: journal CRUD and semantic search tools in `mcp_servers/servers/journal_server.py`
+
+Server launch config lives in `mcp_servers/servers.json` and uses the project virtual environment:
+
+```json
+{
+  "mcpServers": {
+    "rag": {
+      "command": "venv/bin/python",
+      "args": ["mcp_servers/servers/rag_server.py"]
+    },
+    "web": {
+      "command": "venv/bin/python",
+      "args": ["mcp_servers/servers/web_server.py"]
+    },
+    "journal": {
+      "command": "venv/bin/python",
+      "args": ["mcp_servers/servers/journal_server.py"]
+    }
+  }
+}
+```
+
+The folder is named `mcp_servers` so it does not shadow the installed `mcp` SDK package.
 
 ### Demo smoke check
 
@@ -397,10 +430,23 @@ This makes the route decision easier to validate and safer to parse than free-fo
 - Web search sources carried through the agent response
 - Streamed sources returned as a serialized list for UI parsing
 - PostgreSQL-backed journal memory endpoints
+- MCP stdio servers for RAG, web, and journal tools
 - Docker Compose setup for API + Postgres
 
 ## Development Notes
 
 - `python3 -m compileall agent configs api.py` is a quick syntax sanity check.
+- `venv/bin/python -c "from mcp.server.fastmcp import FastMCP"` verifies the MCP SDK is available in the project environment.
 - If you use the Gemini router, make sure `google-genai` is installed from `requirements.txt`.
 - If web search fails, confirm the environment running the app has `ddgs` installed.
+
+---
+title: AI RAG Agent Demo
+emoji: 💬
+colorFrom: yellow
+colorTo: blue
+sdk: gradio
+sdk_version: 6.13.0
+app_file: app.py
+pinned: false
+---
