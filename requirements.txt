@@ -5,7 +5,6 @@ torch>=2.4
 transformers>=4.40,<5.0
 sentence-transformers>=2.6,<3.0
 accelerate>=0.28
-huggingface-hub>=0.23
 
 # ==================================================
 # Vector Search
@@ -25,15 +24,27 @@ rank-bm25>=0.2.2
 fastapi>=0.110
 uvicorn[standard]>=0.29
 pydantic>=2.6
-python-multipart>=0.0.9 # for file uploads
-gradio>=4.44
 pydantic-settings>=2.2
+python-multipart>=0.0.9
+
+# ==================================================
+# LLM Client (Ollama)
+# ==================================================
+httpx>=0.27,<1.0
+
+# ==================================================
+# Agent Framework
+# ==================================================
+langgraph>=0.2
+langchain-core>=0.2
 
 # ==================================================
 # Data Ingestion
 # ==================================================
 pandas>=2.1,<3.0
 openpyxl>=3.1
+pypdf==4.0.1
+pdfplumber==0.10.3
 
 # ==================================================
 # Tokenization (chunking)
@@ -41,27 +52,17 @@ openpyxl>=3.1
 tiktoken>=0.6.0
 
 # ==================================================
+# Web Search
+# ==================================================
+ddgs>=9.0.0
+trafilatura>=1.9,<2.0
+
+# ==================================================
+# MCP Tool Servers
+# ==================================================
+mcp>=1.9.0
+
+# ==================================================
 # Utilities
 # ==================================================
 python-dotenv>=1.0
-tqdm>=4.66
-typing-extensions>=4.9
-statsmodels
-ddgs>=9.0.0
-httpx>=0.27,<1.0
-trafilatura>=1.9,<2.0
-psycopg2-binary>=2.9,<3.0
-
-# Agent Framework
-langgraph>=0.2
-langchain-core>=0.2
-google-genai>=1.10.0
-mcp>=1.9.0
-deepagents>=0.6,<0.7
-langchain-google-genai>=4,<5
-
-# ==================================================
-# PDF Support
-# ==================================================
-pypdf==4.0.1
-pdfplumber==0.10.3

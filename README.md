@@ -1,488 +1,377 @@
+# AI Personal Assistant
 
-# AI RAG Agent
+A full-stack AI personal assistant powered by local LLMs (Ollama), with RAG document search, web search, journal, task management, persistent memory, and calendar — all running privately on your machine. No cloud API keys required.
 
-Agentic RAG system built with FastAPI, LangGraph, hybrid retrieval, local Hugging Face generation, optional structured-output routing, and a journal memory layer that can run on PostgreSQL or SQLite depending on environment.
+## Features
 
-## What It Does
-
-- Answers questions from your local knowledge base with hybrid retrieval.
-- Routes time-sensitive or external queries to web search.
-- Streams answers and source lists from the `/ask` endpoint.
-- Supports document upload, ingestion, and deletion.
-- Stores personal journal entries with pluggable backends:
-  - PostgreSQL for the product/backend deployment
-  - SQLite for demo/Hugging Face deployment
-- Includes a parallel Gradio chat app for Hugging Face Spaces demos.
-
-## Core Features
-
-- LangGraph agent with `decide -> rag|web -> generate`
-- Optional Deep Agents coordinator with planning and specialized subagents
-- Hybrid search using FAISS + BM25
-- Cross-encoder reranking
-- Local answer generation with Hugging Face models
-- Optional structured router using Gemini JSON/schema output
-- MCP-backed RAG, web, and journal tool servers
-- Web search with source URL capture
-- Journal CRUD + semantic search
-- Parallel deployment paths for FastAPI and Gradio
-- Docker Compose setup with API + Postgres
+- **Chat with real-time streaming** — token-by-token responses via Server-Sent Events (SSE)
+- **RAG document search** — upload PDFs, TXT, XLSX, CSV and ask questions with hybrid retrieval (FAISS vector search + BM25 keyword search + cross-encoder reranking)
+- **Web search** — routes time-sensitive queries to DuckDuckGo with parallel page content extraction via trafilatura
+- **Task management** — create, complete, filter, and track tasks with priorities (low/medium/high) and due dates
+- **Journal** — personal journal with full CRUD, mood tagging, and semantic search powered by sentence embeddings
+- **Persistent memory** — remembers user preferences and facts across conversations using embedding-based recall
+- **Calendar** — simple event management with date/time tracking
+- **Conversation history** — multi-turn context within sessions, stored in SQLite
+- **Intelligent tool routing** — LLM-powered router with keyword fallback automatically selects the right tool per query
+- **Memory extraction** — optionally extracts and stores personal facts from conversations for future context
 
 ## Architecture
 
-```text
-User Question
-  -> FastAPI
-  -> LangGraph Agent
-     -> Decide Tool
-        -> MCP Tool Executor
-           -> RAG MCP Server
-           -> Web MCP Server
-  -> Answer Generation
-  -> Streamed Answer + Sources
+```
+┌──────────────────────────────────────────────────────────┐
+│  Frontend: React + Tailwind CSS + Vite                   │
+│  Chat (SSE) │ Tasks Panel │ Journal Panel │ File Upload   │
+└─────────────────────────┬────────────────────────────────┘
+                          │ HTTP / SSE
+┌─────────────────────────▼────────────────────────────────┐
+│  API Layer (FastAPI)                                     │
+│  POST /chat  │ /tasks  │ /journal  │ /upload  │ /health  │
+└─────────────────────────┬────────────────────────────────┘
+                          │
+┌─────────────────────────▼────────────────────────────────┐
+│  Agent Layer (LangGraph StateGraph)                      │
+│  route → execute_tool → generate → extract_memory        │
+└────────┬────────────┬────────────┬───────────────────────┘
+         │            │            │
+    ┌────▼────┐  ┌────▼────┐  ┌───▼─────┐
+    │  LLM    │  │  Tools  │  │  Memory │
+    │ (Ollama)│  │  (6)    │  │         │
+    └─────────┘  └────┬────┘  └───┬─────┘
+                      │           │
+               ┌──────▼──────┐ ┌──▼────────┐
+               │  Retrieval  │ │  Storage   │
+               │ FAISS+BM25  │ │  SQLite    │
+               └─────────────┘ └────────────┘
 ```
 
-## Request Flow
+### Layered Architecture
 
-### RAG path
+The codebase is organized into 7 independent layers with strict top-down dependencies (no circular imports):
 
-1. Query is embedded.
-2. LangGraph calls the RAG MCP server through the MCP stdio client.
-3. Hybrid retrieval runs across vector + BM25 search.
-4. Results are reranked.
-5. Top documents become context.
-6. Local LLM generates the grounded answer.
+```
+API Layer  →  Agent Layer  →  LLM Layer
+                            →  Tool Layer  →  Retrieval Layer
+                                           →  Storage Layer
+                            →  Memory Layer →  Storage Layer
+```
 
-### Web path
+| Layer | Purpose | Key Files |
+|-------|---------|-----------|
+| **API** | FastAPI endpoints, SSE streaming, request/response schemas | `api/app.py`, `api/routes/`, `api/schemas/` |
+| **Agent** | LangGraph state graph, tool orchestration, sync + streaming runners | `agent/graph.py`, `agent/nodes.py`, `agent/runner.py` |
+| **LLM** | Ollama REST client (sync, async, streaming), prompt templates, model management | `llm/ollama_client.py`, `llm/prompts.py`, `llm/model_manager.py` |
+| **Tools** | 6 independent tools with uniform `BaseTool` interface and registry | `tools/base.py`, `tools/registry.py`, `tools/*.py` |
+| **Memory** | Conversation history (per-session), long-term user facts (cross-session), context builder | `memory/conversation_memory.py`, `memory/long_term_memory.py`, `memory/context_builder.py` |
+| **Retrieval** | FAISS vector index, BM25 keyword index, hybrid search, cross-encoder reranking, document ingestion | `retrieval/`, `embeddings/`, `ranker/`, `ingestion/` |
+| **Storage** | SQLite database, schema management, repository pattern for all entities | `storage/database.py`, `storage/repositories/` |
 
-1. Router selects `web`.
-2. LangGraph calls the web MCP server through the MCP stdio client.
-3. DDGS fetches search results.
-4. Titles, URLs, and snippets are converted into context.
-5. The answer model responds using that web context.
-6. Source URLs are streamed back as a normal serialized list.
+### Tools
+
+| Tool | Description | Backing |
+|------|-------------|---------|
+| `rag` | Hybrid search over uploaded documents with reranking | FAISS + BM25 + cross-encoder |
+| `web` | DuckDuckGo search with parallel page content extraction | ddgs + trafilatura |
+| `journal` | Journal entries — create, search, list | SQLite + sentence embeddings |
+| `task` | Task/reminder management with status, priority, due dates | SQLite |
+| `memory` | Store and recall user preferences and facts | SQLite + sentence embeddings |
+| `calendar` | Calendar event management | SQLite |
+
+### Agent Flow
+
+The LangGraph agent processes each query through this graph:
+
+```
+1. ROUTE      → LLM decides which tool to use (with keyword fallback)
+                 "rag" | "web" | "journal" | "task" | "memory" | "calendar" | "direct"
+
+2. EXECUTE    → Selected tool runs and returns context + sources
+                 (skipped for "direct" — simple questions answered without tools)
+
+3. GENERATE   → LLM produces the answer using:
+                 - Tool context (search results, task list, etc.)
+                 - Conversation history (last 20 messages)
+                 - User memory (known preferences and facts)
+
+4. EXTRACT    → (Optional) LLM extracts memorable facts from the exchange
+                 e.g., "user prefers Python" → stored for future conversations
+```
+
+### How Memory Works
+
+**Short-term (conversation memory):**
+- Every message (user + assistant) is stored in SQLite per `conversation_id`
+- On each turn, the last 20 messages are loaded as context for the LLM
+- The frontend generates a `conversation_id` per chat session
+
+**Long-term (user memory):**
+- Personal facts are extracted from conversations via an LLM call (configurable)
+- Facts are stored as key-value pairs with sentence embeddings
+- On each turn, relevant facts are recalled via semantic search and injected into the system prompt
+- Example: user says "I'm a data scientist" → stored → future responses are tailored accordingly
+
+### Retrieval Pipeline
+
+When the `rag` tool is selected:
+
+```
+Query
+  ↓
+Embed query (sentence-transformers/all-MiniLM-L6-v2)
+  ↓
+Hybrid search:
+  ├── FAISS vector search (cosine similarity, weight: 0.7)
+  ├── BM25 keyword search (weight: 0.3)
+  └── Merge + normalize scores
+  ↓
+Filter by MIN_HYBRID_SCORE (0.15)
+  ↓
+Cross-encoder reranking (ms-marco-MiniLM-L-6-v2)
+  ↓
+Filter by MIN_RERANK_SCORE (0.10)
+  ↓
+Top-K documents → formatted context for LLM
+```
+
+Document ingestion: files are loaded (PDF/TXT/XLSX/CSV) → chunked by token count (400 tokens, 80 overlap via tiktoken) → embedded → stored in FAISS index.
 
 ## Project Structure
 
-```text
+```
 ai-rag-agent/
-├── agent/
-│   ├── agent_executor.py
-│   ├── agent_graph.py
-│   ├── agent_state.py
-│   ├── local_llm_answer.py
-│   ├── rag_tool.py
-│   ├── router.py
-│   └── web_tool.py
-├── configs/
-│   └── config.py
+├── api/                          # API Layer
+│   ├── app.py                    #   FastAPI app, CORS, lifespan
+│   ├── routes/
+│   │   ├── chat.py               #   POST /chat (SSE), POST /chat/sync
+│   │   ├── documents.py          #   POST /upload, DELETE /delete
+│   │   ├── journal.py            #   /journal/* CRUD + search
+│   │   ├── tasks.py              #   /tasks/* CRUD
+│   │   └── health.py             #   GET /health, /status
+│   └── schemas/
+│       ├── chat.py               #   ChatRequest, ChatResponse
+│       └── tasks.py              #   TaskCreate, TaskUpdate
+│
+├── agent/                        # Agent Layer
+│   ├── graph.py                  #   LangGraph StateGraph definition
+│   ├── state.py                  #   AgentState TypedDict
+│   ├── nodes.py                  #   Graph nodes: route, execute_tool, generate, extract_memory
+│   └── runner.py                 #   run_agent() sync + run_agent_stream() async
+│
+├── llm/                          # LLM Layer
+│   ├── ollama_client.py          #   OllamaClient: chat, generate, chat_stream
+│   ├── prompts.py                #   System, router, answer, memory extraction prompts
+│   └── model_manager.py          #   Check/list/pull Ollama models
+│
+├── tools/                        # Tool Layer
+│   ├── base.py                   #   BaseTool ABC, ToolResult, ToolDefinition
+│   ├── registry.py               #   Tool registry: get_all_tools(), get_tool()
+│   ├── rag_tool.py               #   RAG hybrid search tool
+│   ├── web_tool.py               #   Web search tool
+│   ├── journal_tool.py           #   Journal CRUD + search tool
+│   ├── task_tool.py              #   Task management tool
+│   ├── memory_tool.py            #   User memory store/recall tool
+│   └── calendar_tool.py          #   Calendar event tool
+│
+├── memory/                       # Memory Layer
+│   ├── conversation_memory.py    #   Per-session message history
+│   ├── long_term_memory.py       #   Cross-session user facts with semantic recall
+│   └── context_builder.py        #   Builds LLM message list from all context sources
+│
+├── retrieval/                    # Retrieval Layer
+│   └── vector_store.py           #   FAISS + BM25 hybrid search
+│
 ├── embeddings/
-├── ingestion/
-├── journal/
-│   ├── factory.py
-│   ├── postgres_store.py
-│   ├── schemas.py
-│   ├── sqlite_store.py
-│   └── store.py
-├── mcp_servers/
+│   └── sentence_embeddings.py    #   SentenceTransformer wrapper
+│
+├── ranker/
+│   └── cross_encoder.py          #   Cross-encoder reranking
+│
+├── ingestion/                    # Document Ingestion
+│   ├── load_documents.py         #   PDF, TXT, XLSX, CSV loaders
+│   ├── chunk_documents.py        #   Token-based chunking (tiktoken)
+│   └── ingest_documents.py       #   Orchestration: load → chunk → embed → store
+│
+├── storage/                      # Storage Layer
+│   ├── database.py               #   SQLite setup, schema, connection manager
+│   └── repositories/
+│       ├── user_repo.py          #   User profiles
+│       ├── conversation_repo.py  #   Conversations + messages
+│       ├── journal_repo.py       #   Journal entries
+│       ├── task_repo.py          #   Tasks
+│       └── memory_repo.py        #   User memories
+│
+├── mcp_servers/                  # MCP Tool Servers (stdio)
+│   ├── servers.json              #   Server config
 │   ├── client/
-│   │   └── mcp_client.py
-│   ├── servers/
-│   │   ├── journal_server.py
-│   │   ├── rag_server.py
-│   │   └── web_server.py
-│   └── servers.json
-├── retrieval/
-├── app.py
-├── api.py
-├── docker-compose.yml
-├── main.py
-└── requirements.txt
+│   │   └── mcp_client.py         #   MCP stdio client
+│   └── servers/
+│       ├── rag_server.py         #   search_documents() MCP server
+│       ├── web_server.py         #   search_web() MCP server
+│       └── journal_server.py     #   Journal CRUD MCP server
+│
+├── configs/
+│   └── config.py                 #   Pydantic BaseSettings (.env loader)
+│
+├── data/                         #   (gitignored) runtime data
+│   ├── files/                    #   Uploaded documents
+│   ├── storage/                  #   FAISS index + pickled documents
+│   └── db/                       #   SQLite databases
+│
+├── .env.example                  #   Configuration template
+├── requirements.txt              #   Python dependencies
+├── Dockerfile                    #   Container build
+└── docker-compose.yml            #   Docker Compose setup
 ```
 
-## Setup
+## Getting Started
 
-### 1. Create a virtual environment
+### Prerequisites
+
+- Python 3.11+
+- [Ollama](https://ollama.com/download) installed and running
+- Node.js 18+ (for the frontend)
+
+### 1. Install Ollama
+
+Download from [ollama.com/download](https://ollama.com/download), install, and launch it. Then pull the model:
 
 ```bash
-python3 -m venv venv
+ollama pull qwen2.5:7b
+```
+
+This downloads ~4.7 GB. Requires ~8 GB free RAM to run.
+
+### 2. Backend Setup
+
+```bash
+cd ai-rag-agent
+
+# Create virtual environment
+python -m venv venv
 source venv/bin/activate
-```
 
-### 2. Install dependencies
-
-```bash
+# Install dependencies
 pip install -r requirements.txt
+
+# Copy and configure environment
+cp .env.example .env
+
+# Start the server
+python -m api.app
 ```
 
-### 3. Configure environment
+The API runs at `http://localhost:8000`.
+- `http://localhost:8000/health` — health check
+- `http://localhost:8000/status` — system status (Ollama connectivity, models, features)
+- `http://localhost:8000/docs` — interactive API docs (Swagger)
 
-Create `.env` from `.env.example` and set the required values.
-
-Key variables:
-
-```env
-EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
-RERANK_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
-LLM_MODEL=Qwen/Qwen2-1.5B-Instruct
-
-ROUTER_PROVIDER=local
-ROUTER_MODEL=gemini-2.5-flash-lite
-GOOGLE_API_KEY=
-AGENT_MODE=legacy
-DEEP_AGENT_MODEL=gemini-2.5-flash
-DEEP_AGENT_RECURSION_LIMIT=40
-WEB_SEARCH_MAX_RESULTS=3
-MAX_UPLOAD_MB=15
-
-DATA_DIR=data
-STORAGE_DIR=storage
-JOURNAL_BACKEND=postgres
-JOURNAL_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/journal_db
-JOURNAL_SQLITE_PATH=journal_demo.db
-```
-
-Notes:
-
-- Use `ROUTER_PROVIDER=local` to keep routing fully local.
-- Use `ROUTER_PROVIDER=gemini` to enable schema-constrained routing with Gemini.
-- `GOOGLE_API_KEY` is required only for the Gemini router path.
-- Set `AGENT_MODE=deep` to use the Deep Agents coordinator; this also requires `GOOGLE_API_KEY`.
-- Use `AGENT_MODE=legacy` to keep the original `decide -> rag|web -> generate` graph.
-- Use `JOURNAL_BACKEND=postgres` for the product/backend deployment.
-- Use `JOURNAL_BACKEND=sqlite` for demo deployments such as Hugging Face Spaces.
-- When `/data` exists, storage defaults automatically point there for the demo.
-
-### 4. Ingest documents
+### 3. Frontend Setup
 
 ```bash
-python3 main.py
+cd ai-rag-ui
+
+npm install
+npm run dev
 ```
 
-### 5. Run the API
+Opens at `http://localhost:5173`.
 
-```bash
-uvicorn api:app --reload --port 8000
-```
+## Configuration Reference
 
-Open docs at [http://localhost:8000/docs](http://localhost:8000/docs).
+All settings are in `.env` (loaded via Pydantic BaseSettings):
 
-Useful readiness checks:
-
-```bash
-curl http://localhost:8000/health
-curl http://localhost:8000/status
-```
-
-### 6. Run the Gradio demo
-
-```bash
-python3 app.py
-```
-
-This launches a ChatGPT-style Gradio UI that runs in parallel with the existing FastAPI backend path.
-The demo UI includes model/backend status, one-click prompts, safer uploads, route labels, and source lists for easier screen-recording or live sharing.
-
-## MCP Servers
-
-The LangGraph agent uses MCP over stdio for tool execution. The router still chooses `rag` or `web`, then `agent/agent_graph.py` calls the MCP tool executor:
-
-- `rag`: `search_documents` in `mcp_servers/servers/rag_server.py`
-- `web`: `search_web` in `mcp_servers/servers/web_server.py`
-- `journal`: journal CRUD and semantic search tools in `mcp_servers/servers/journal_server.py`
-
-Server launch config lives in `mcp_servers/servers.json` and uses the project virtual environment:
-
-```json
-{
-  "mcpServers": {
-    "rag": {
-      "command": "venv/bin/python",
-      "args": ["mcp_servers/servers/rag_server.py"]
-    },
-    "web": {
-      "command": "venv/bin/python",
-      "args": ["mcp_servers/servers/web_server.py"]
-    },
-    "journal": {
-      "command": "venv/bin/python",
-      "args": ["mcp_servers/servers/journal_server.py"]
-    }
-  }
-}
-```
-
-The folder is named `mcp_servers` so it does not shadow the installed `mcp` SDK package.
-
-## Deep Agents
-
-Deep Agents is an optional orchestration layer over the existing MCP tools. It adds planning, context management, and delegation while preserving the API response shape used by the FastAPI and Gradio clients.
-
-The coordinator has three MCP-backed tools:
-
-- `rag_search`: internal document retrieval
-- `live_web_search`: current public-web research
-- `journal_search`: private journal retrieval scoped to the request's `user_id`
-
-It can delegate work to a `researcher` subagent or a `journal-analyst` subagent. Enable it in `.env`:
-
-```env
-AGENT_MODE=deep
-DEEP_AGENT_MODEL=gemini-2.5-flash
-DEEP_AGENT_RECURSION_LIMIT=40
-GOOGLE_API_KEY=your-google-api-key
-```
-
-`POST /ask` accepts an optional journal user scope:
-
-```json
-{
-  "question": "Compare my recent journal themes with current productivity research",
-  "user_id": "demo-user"
-}
-```
-
-Leave `AGENT_MODE=legacy` for fully local answer generation without a tool-calling hosted chat model.
-
-### Demo smoke check
-
-Run a short route-and-answer smoke check before publishing:
-
-```bash
-python3 demo_eval.py
-```
-
-## Journal Backends
-
-The journal layer supports two storage modes behind the same API:
-
-- `postgres`: product/default backend
-- `sqlite`: demo backend
-
-### Product mode
-
-```env
-JOURNAL_BACKEND=postgres
-JOURNAL_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/journal_db
-```
-
-### Demo mode
-
-```env
-JOURNAL_BACKEND=sqlite
-JOURNAL_SQLITE_PATH=journal_demo.db
-```
-
-For Hugging Face Spaces, use persistent storage and point SQLite at `/data`:
-
-```env
-JOURNAL_BACKEND=sqlite
-JOURNAL_SQLITE_PATH=/data/journal_demo.db
-```
-
-You can start from [.env.hf.example] for a Space-friendly configuration.
-
-## Docker
-
-Run the API and PostgreSQL together:
-
-```bash
-docker compose up --build
-```
-
-Services:
-
-- `rag-api` on port `8000`
-- `postgres` on port `5432`
-
-## Deployment Modes
-
-- `api.py`: backend/API entrypoint for product integrations such as a future Vercel frontend
-- `app.py`: Gradio demo entrypoint for Hugging Face Spaces
-
-For Hugging Face Spaces, keep `app.py` at the repo root and install dependencies from `requirements.txt`.
-
-Recommended deployment split:
-
-- Product stack: FastAPI + PostgreSQL
-- Demo stack: Gradio + SQLite
-
-### Hugging Face Spaces
-
-Recommended config for the demo:
-
-```env
-JOURNAL_BACKEND=sqlite
-JOURNAL_SQLITE_PATH=/data/journal_demo.db
-```
-
-Notes:
-
-- `app.py` is the Space entrypoint.
-- Attach persistent storage if you want uploaded files, vector indexes, and journal data to survive restarts.
-- SQLite is recommended for Spaces because a normal external PostgreSQL service on port `5432` is not the simplest deployment path there.
-- `DATA_DIR`, `STORAGE_DIR`, and `JOURNAL_SQLITE_PATH` now default to `/data/...` automatically when that mount exists.
-
-### Hugging Face Deployment Steps
-
-1. Create a new Hugging Face Space and choose `Gradio`.
-2. Push this repository to the Space.
-3. In the Space settings, add variables from [.env.hf.example].
-4. Attach persistent storage so `/data` survives restarts.
-5. Launch the Space with `app.py` as the entrypoint.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
+| `OLLAMA_CHAT_MODEL` | `qwen2.5:7b` | Model for chat and routing |
+| `OLLAMA_TIMEOUT` | `120` | Request timeout in seconds |
+| `EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | Embedding model for retrieval + memory |
+| `RERANK_MODEL` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Cross-encoder for reranking |
+| `VECTOR_WEIGHT` | `0.7` | Weight for vector search in hybrid |
+| `BM25_WEIGHT` | `0.3` | Weight for BM25 in hybrid |
+| `HYBRID_K` | `10` | Number of candidates from hybrid search |
+| `RERANK_K` | `5` | Number of documents after reranking |
+| `MIN_HYBRID_SCORE` | `0.15` | Minimum score to pass hybrid search |
+| `MIN_RERANK_SCORE` | `0.10` | Minimum score to pass reranking |
+| `CHUNK_SIZE` | `400` | Token count per chunk |
+| `CHUNK_OVERLAP` | `80` | Overlap between chunks in tokens |
+| `WEB_SEARCH_MAX_RESULTS` | `3` | Max DuckDuckGo results per query |
+| `API_PORT` | `8000` | FastAPI server port |
+| `DATABASE_PATH` | `data/db/assistant.db` | SQLite database path |
+| `DATA_DIR` | `data/files` | Uploaded document storage |
+| `STORAGE_DIR` | `data/storage` | FAISS index storage |
+| `CONVERSATION_HISTORY_LIMIT` | `20` | Messages loaded per conversation turn |
+| `MEMORY_EXTRACTION_ENABLED` | `true` | Extract user facts from conversations |
+| `DEBUG` | `false` | Enable debug mode with auto-reload |
 
 ## API Endpoints
 
-### Ask
+### Chat
 
-`POST /ask`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/chat` | Chat with SSE streaming. Body: `{question, user_id?, conversation_id?}` |
+| POST | `/chat/sync` | Chat without streaming. Returns `{answer, sources, tool}` |
 
-Request:
+### Documents
 
-```json
-{
-  "question": "What changed in the latest policy?"
-}
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/upload` | Upload a document (PDF, TXT, XLSX, CSV). Multipart form with `file` field |
+| DELETE | `/delete?source=filename` | Remove a document from the index |
 
-Response format:
+### Tasks
 
-- streamed answer text
-- trailing `SOURCES :`
-- serialized source list, for example:
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/tasks?user_id=&status=` | List tasks, optionally filtered by status |
+| POST | `/tasks?user_id=` | Create a task. Body: `{title, description?, due_date?, priority?}` |
+| GET | `/tasks/{id}?user_id=` | Get a single task |
+| PATCH | `/tasks/{id}?user_id=` | Update a task. Body: `{title?, status?, priority?, due_date?}` |
+| DELETE | `/tasks/{id}?user_id=` | Delete a task |
 
-```text
-SOURCES :
-["https://example.com/news","employee_policy.pdf"]
-```
+### Journal
 
-### Legacy Ask
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/journal/entries?user_id=&limit=&offset=` | List entries with pagination |
+| POST | `/journal/entries` | Create an entry. Body: `{user_id, content, title?, mood?}` |
+| GET | `/journal/entries/{id}?user_id=` | Get a single entry |
+| PATCH | `/journal/entries/{id}?user_id=` | Update an entry |
+| DELETE | `/journal/entries/{id}?user_id=` | Delete an entry |
+| POST | `/journal/search` | Semantic search. Body: `{user_id, query, k?}` |
 
-`POST /ask-old`
+### System
 
-Returns a non-streaming RAG-only response with confidence and sources.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Returns `{status: "ok"}` |
+| GET | `/status` | Full system status: Ollama, models, features |
 
-### Upload
+## Tech Stack
 
-`POST /upload`
+| Component | Technology |
+|-----------|-----------|
+| **Backend framework** | FastAPI with uvicorn |
+| **Agent orchestration** | LangGraph (StateGraph) |
+| **LLM runtime** | Ollama (local, qwen2.5:7b) |
+| **Vector search** | FAISS (IndexFlatIP) |
+| **Keyword search** | rank-bm25 |
+| **Reranking** | sentence-transformers CrossEncoder |
+| **Embeddings** | sentence-transformers (all-MiniLM-L6-v2) |
+| **Database** | SQLite with WAL mode |
+| **Web search** | DuckDuckGo (ddgs) + trafilatura |
+| **Chunking** | tiktoken (cl100k_base) |
+| **Frontend** | React 19, Vite, Tailwind CSS |
+| **Streaming** | Server-Sent Events (SSE) |
 
-Uploads a `.txt`, `.pdf`, `.xlsx`, or `.csv` document and ingests it into the knowledge base.
+## Database Schema
 
-### Delete Document
+SQLite with 7 tables:
 
-`DELETE /delete?source=<filename>`
-
-Removes a source from storage and deletes the local file.
-
-### Journal APIs
-
-`POST /journal/entries`
-
-Create a journal entry.
-
-```json
-{
-  "user_id": "user-1",
-  "title": "Good day",
-  "content": "Finished a project milestone.",
-  "mood": "happy",
-  "tags": ["work", "progress"]
-}
-```
-
-`GET /journal/entries?user_id=user-1`
-
-List entries for a user with pagination metadata.
-
-Response shape:
-
-```json
-{
-  "items": [],
-  "total": 0,
-  "limit": 20,
-  "offset": 0,
-  "has_more": false
-}
-```
-
-`GET /journal/entries/{entry_id}?user_id=user-1`
-
-Fetch a single entry.
-
-`PATCH /journal/entries/{entry_id}?user_id=user-1`
-
-Update an existing journal entry. This preserves `created_at` and writes `updated_at`.
-
-`DELETE /journal/entries/{entry_id}?user_id=user-1`
-
-Delete a journal entry.
-
-`POST /journal/search`
-
-Semantic search across a user's journal entries.
-
-```json
-{
-  "user_id": "user-1",
-  "query": "times I felt productive",
-  "k": 5
-}
-```
-
-### Journal timestamp behavior
-
-- `created_at` is set once when a journal entry is created.
-- `updated_at` stays empty until the entry is edited.
-- Proper edits should use `PATCH /journal/entries/{entry_id}`.
-- For backward compatibility, `POST /journal/entries?entry_id=...` also updates an existing entry if an `entry_id` is supplied.
-
-## Routing Modes
-
-### Local router
-
-Uses the local LLM prompt plus a keyword fallback.
-
-### Structured router
-
-Uses Gemini with a schema that constrains output to:
-
-```json
-{"tool": "web"}
-```
-
-or
-
-```json
-{"tool": "rag"}
-```
-
-This makes the route decision easier to validate and safer to parse than free-form text.
-
-## Current Additions In This Version
-
-- Structured tool routing with schema-constrained output
-- Env-configurable router and web search parameters
-- Web search sources carried through the agent response
-- Streamed sources returned as a serialized list for UI parsing
-- PostgreSQL-backed journal memory endpoints
-- MCP stdio servers for RAG, web, and journal tools
-- Docker Compose setup for API + Postgres
-
-## Development Notes
-
-- `python3 -m compileall agent configs api.py` is a quick syntax sanity check.
-- `venv/bin/python -c "from mcp.server.fastmcp import FastMCP"` verifies the MCP SDK is available in the project environment.
-- If you use the Gemini router, make sure `google-genai` is installed from `requirements.txt`.
-- If web search fails, confirm the environment running the app has `ddgs` installed.
-
----
-title: AI RAG Agent Demo
-emoji: 💬
-colorFrom: yellow
-colorTo: blue
-sdk: gradio
-sdk_version: 6.13.0
-app_file: app.py
-pinned: false
----
+- **users** — user profiles
+- **conversations** — chat sessions per user
+- **messages** — message history per conversation (role, content, timestamps)
+- **journal_entries** — journal with title, content, mood, tags, embeddings
+- **tasks** — tasks with title, status, priority, due dates
+- **user_memories** — key-value facts with embeddings for semantic recall
+- **calendar_events** — events with title, start/end times

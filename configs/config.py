@@ -1,7 +1,6 @@
 from pathlib import Path
 from typing import Optional
 
-from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -15,81 +14,70 @@ def _hf_default_path(local_path: str, data_path: str) -> str:
 class Settings(BaseSettings):
 
     # =========================
-    # Models
+    # Ollama / LLM
     # =========================
-    EMBEDDING_MODEL: str
-    RERANK_MODEL: str
-    LLM_MODEL: str
-    ROUTER_PROVIDER: str
-    ROUTER_MODEL: str
-    GOOGLE_API_KEY: str
-    WEB_SEARCH_MAX_RESULTS: int
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_CHAT_MODEL: str = "qwen2.5:7b"
+    OLLAMA_TIMEOUT: int = 120
 
     # =========================
-    # Agent Runtime
+    # Embeddings & Reranking
     # =========================
-    AGENT_MODE: str = "deep"
-    DEEP_AGENT_MODEL: str
-    DEEP_AGENT_RECURSION_LIMIT: int = 40
-    DEEP_AGENT_LOG_CONVERSATIONS: bool = False
-    DEEP_AGENT_LOG_PATH: str = _hf_default_path("deep_agent_conversations.log", "deep_agent_conversations.log")
+    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    RERANK_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
     # =========================
     # Retrieval
     # =========================
-    TOP_K: int
-    RETRIEVAL_K: int
-    VECTOR_WEIGHT: float
-    BM25_WEIGHT: float
-    HYBRID_K: int
-    RERANK_K: int
+    TOP_K: int = 4
+    RETRIEVAL_K: int = 20
+    VECTOR_WEIGHT: float = 0.7
+    BM25_WEIGHT: float = 0.3
+    HYBRID_K: int = 10
+    RERANK_K: int = 5
     MIN_HYBRID_SCORE: float = 0.0
     MIN_RERANK_SCORE: float = -9999.0
-
-    ENABLE_RERANK: bool
-    ENABLE_HYBRID: bool
+    ENABLE_RERANK: bool = True
+    ENABLE_HYBRID: bool = True
 
     # =========================
     # Chunking
     # =========================
-    CHUNK_SIZE: int
-    CHUNK_OVERLAP: int
+    CHUNK_SIZE: int = 400
+    CHUNK_OVERLAP: int = 80
+
+    # =========================
+    # Web Search
+    # =========================
+    WEB_SEARCH_MAX_RESULTS: int = 3
 
     # =========================
     # API
     # =========================
-    STREAM_DELAY: float
-    API_PORT: int
+    API_PORT: int = 8000
     MAX_UPLOAD_MB: int = 15
 
     # =========================
     # Storage
     # =========================
-    DATA_DIR: str = _hf_default_path("data", "data")
-    STORAGE_DIR: str = _hf_default_path("storage", "storage")
-    JOURNAL_BACKEND: str = "postgres"
-    JOURNAL_DATABASE_URL: Optional[str] = None
-    JOURNAL_SQLITE_PATH: str = _hf_default_path("journal_demo.db", "journal_demo.db")
+    DATA_DIR: str = _hf_default_path("data/files", "data/files")
+    STORAGE_DIR: str = _hf_default_path("data/storage", "data/storage")
+    DATABASE_PATH: str = _hf_default_path("data/db/assistant.db", "data/db/assistant.db")
+
+    # =========================
+    # Memory
+    # =========================
+    CONVERSATION_HISTORY_LIMIT: int = 20
+    MEMORY_EXTRACTION_ENABLED: bool = True
 
     # =========================
     # Debug
     # =========================
-    DEBUG: bool
-    SHOW_RETRIEVED: bool
-    SHOW_RERANKED: bool
-
-    @model_validator(mode="after")
-    def validate_journal_settings(self):
-        backend = self.JOURNAL_BACKEND.strip().lower()
-        if backend == "postgres" and not self.JOURNAL_DATABASE_URL:
-            raise ValueError("JOURNAL_DATABASE_URL is required when JOURNAL_BACKEND=postgres")
-        if self.AGENT_MODE.strip().lower() not in {"legacy", "deep"}:
-            raise ValueError("AGENT_MODE must be either 'legacy' or 'deep'")
-        return self
+    DEBUG: bool = False
 
     class Config:
         env_file = ".env"
-        extra = "ignore"   # ignore unknown vars
+        extra = "ignore"
 
 
 settings = Settings()
