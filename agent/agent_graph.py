@@ -26,16 +26,6 @@ def mcp_executor(state: AgentState):
     result = search_documents(question)
     context = result.get("context", "")
     sources = result.get("sources", [])
-    should_fallback = result.get("should_fallback", False)
-
-    if should_fallback or not context:
-        print("\n↪️ RAG confidence too low, falling back to MCP Web")
-        web_result = search_web(question)
-        return {
-            "tool": "web",
-            "context": web_result.get("context", ""),
-            "sources": web_result.get("sources", []),
-        }
 
     return {"tool": "rag", "context": context, "sources": sources}
 

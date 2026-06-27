@@ -103,6 +103,7 @@ def journal_status():
 
 class QuestionRequest(BaseModel):
     question: str
+    user_id: str = "demo-user"
 
 
 @app.get("/health")
@@ -117,6 +118,8 @@ def status():
         "journal": journal_status(),
         "web_search": {"enabled": True, "max_results": settings.WEB_SEARCH_MAX_RESULTS},
         "models": {
+            "agent_mode": settings.AGENT_MODE,
+            "deep_agent": settings.DEEP_AGENT_MODEL,
             "embedding": settings.EMBEDDING_MODEL,
             "rerank": settings.RERANK_MODEL,
             "llm": settings.LLM_MODEL,
@@ -164,7 +167,7 @@ async def ask_question(req: QuestionRequest):
 
     async def generate():
 
-        result = await asyncio.to_thread(run_agent, req.question)
+        result = await asyncio.to_thread(run_agent, req.question, req.user_id)
 
         for word in result["answer"].split():
             yield word + " "

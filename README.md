@@ -17,6 +17,7 @@ Agentic RAG system built with FastAPI, LangGraph, hybrid retrieval, local Huggin
 ## Core Features
 
 - LangGraph agent with `decide -> rag|web -> generate`
+- Optional Deep Agents coordinator with planning and specialized subagents
 - Hybrid search using FAISS + BM25
 - Cross-encoder reranking
 - Local answer generation with Hugging Face models
@@ -128,6 +129,9 @@ LLM_MODEL=Qwen/Qwen2-1.5B-Instruct
 ROUTER_PROVIDER=local
 ROUTER_MODEL=gemini-2.5-flash-lite
 GOOGLE_API_KEY=
+AGENT_MODE=legacy
+DEEP_AGENT_MODEL=gemini-2.5-flash
+DEEP_AGENT_RECURSION_LIMIT=40
 WEB_SEARCH_MAX_RESULTS=3
 MAX_UPLOAD_MB=15
 
@@ -143,6 +147,8 @@ Notes:
 - Use `ROUTER_PROVIDER=local` to keep routing fully local.
 - Use `ROUTER_PROVIDER=gemini` to enable schema-constrained routing with Gemini.
 - `GOOGLE_API_KEY` is required only for the Gemini router path.
+- Set `AGENT_MODE=deep` to use the Deep Agents coordinator; this also requires `GOOGLE_API_KEY`.
+- Use `AGENT_MODE=legacy` to keep the original `decide -> rag|web -> generate` graph.
 - Use `JOURNAL_BACKEND=postgres` for the product/backend deployment.
 - Use `JOURNAL_BACKEND=sqlite` for demo deployments such as Hugging Face Spaces.
 - When `/data` exists, storage defaults automatically point there for the demo.
@@ -207,6 +213,36 @@ Server launch config lives in `mcp_servers/servers.json` and uses the project vi
 ```
 
 The folder is named `mcp_servers` so it does not shadow the installed `mcp` SDK package.
+
+## Deep Agents
+
+Deep Agents is an optional orchestration layer over the existing MCP tools. It adds planning, context management, and delegation while preserving the API response shape used by the FastAPI and Gradio clients.
+
+The coordinator has three MCP-backed tools:
+
+- `rag_search`: internal document retrieval
+- `live_web_search`: current public-web research
+- `journal_search`: private journal retrieval scoped to the request's `user_id`
+
+It can delegate work to a `researcher` subagent or a `journal-analyst` subagent. Enable it in `.env`:
+
+```env
+AGENT_MODE=deep
+DEEP_AGENT_MODEL=gemini-2.5-flash
+DEEP_AGENT_RECURSION_LIMIT=40
+GOOGLE_API_KEY=your-google-api-key
+```
+
+`POST /ask` accepts an optional journal user scope:
+
+```json
+{
+  "question": "Compare my recent journal themes with current productivity research",
+  "user_id": "demo-user"
+}
+```
+
+Leave `AGENT_MODE=legacy` for fully local answer generation without a tool-calling hosted chat model.
 
 ### Demo smoke check
 

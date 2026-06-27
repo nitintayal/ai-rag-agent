@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from configs.config import settings
+from .model import build_model_config, load_model
 
 
 class ToolDecision(BaseModel):
@@ -34,6 +35,8 @@ def gemini_structured_router(question: str) -> str:
     if not settings.GOOGLE_API_KEY:
         raise ValueError("GOOGLE_API_KEY is not configured")
 
+    router_config = build_model_config("router")
+
     try:
         from google import genai
     except ImportError as exc:
@@ -52,9 +55,9 @@ Choose:
 Question: {question}
 """.strip()
 
-    client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+    client = load_model("router")
     response = client.models.generate_content(
-        model=settings.ROUTER_MODEL,
+        model=router_config["model_name"],
         contents=prompt,
         config={
             "temperature": 0,

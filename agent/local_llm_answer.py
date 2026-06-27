@@ -1,21 +1,20 @@
-from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 from typing import Optional
 from configs.config import settings
 from .agent_state import AgentState
+from .model import build_model_config, load_model
 from .router import gemini_structured_router, keyword_fallback_router
 
-MODEL_NAME = settings.LLM_MODEL
+llm_config = build_model_config("llm")
+DEFAULT_TEMPERATURE = llm_config.get("temperature", 0.0)
+DEFAULT_MAX_NEW_TOKENS = llm_config.get("max_new_tokens", 300)
 
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+tokenizer, model = load_model("llm")
 
-model = AutoModelForCausalLM.from_pretrained(
-    MODEL_NAME,
-    device_map="cpu",          # 🔴 FORCE CPU
-    dtype=torch.float32  # 🔴 CPU-safe dtype
-)
+def llm_generate(prompt: str, max_new_tokens: Optional[int] = None, temperature: Optional[float] = 0.2) -> str:
+    if max_new_tokens is None:
+        max_new_tokens = DEFAULT_MAX_NEW_TOKENS
 
-def llm_generate(prompt: str, max_new_tokens: Optional[int] = 300, temperature: Optional[float] = 0.2) -> str:
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
     generation_kwargs = {

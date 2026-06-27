@@ -26,6 +26,15 @@ class Settings(BaseSettings):
     WEB_SEARCH_MAX_RESULTS: int
 
     # =========================
+    # Agent Runtime
+    # =========================
+    AGENT_MODE: str = "deep"
+    DEEP_AGENT_MODEL: str
+    DEEP_AGENT_RECURSION_LIMIT: int = 40
+    DEEP_AGENT_LOG_CONVERSATIONS: bool = False
+    DEEP_AGENT_LOG_PATH: str = _hf_default_path("deep_agent_conversations.log", "deep_agent_conversations.log")
+
+    # =========================
     # Retrieval
     # =========================
     TOP_K: int
@@ -74,6 +83,8 @@ class Settings(BaseSettings):
         backend = self.JOURNAL_BACKEND.strip().lower()
         if backend == "postgres" and not self.JOURNAL_DATABASE_URL:
             raise ValueError("JOURNAL_DATABASE_URL is required when JOURNAL_BACKEND=postgres")
+        if self.AGENT_MODE.strip().lower() not in {"legacy", "deep"}:
+            raise ValueError("AGENT_MODE must be either 'legacy' or 'deep'")
         return self
 
     class Config:
