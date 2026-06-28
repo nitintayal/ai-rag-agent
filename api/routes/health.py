@@ -13,11 +13,9 @@ def health():
 
 @router.get("/status")
 def status():
-    llm_status = get_status(settings.OLLAMA_BASE_URL, settings.OLLAMA_CHAT_MODEL)
-    return {
+    result = {
         "status": "ok",
-        "llm": llm_status,
-        "embedding_model": settings.EMBEDDING_MODEL,
+        "llm_provider": settings.LLM_PROVIDER,
         "database": settings.DATABASE_PATH,
         "features": {
             "memory_extraction": settings.MEMORY_EXTRACTION_ENABLED,
@@ -25,3 +23,9 @@ def status():
             "reranking": settings.ENABLE_RERANK,
         },
     }
+    if settings.LLM_PROVIDER == "gemini":
+        result["gemini_model"] = settings.GEMINI_MODEL
+        result["gemini_key_set"] = bool(settings.GOOGLE_API_KEY)
+    else:
+        result["llm"] = get_status(settings.OLLAMA_BASE_URL, settings.OLLAMA_CHAT_MODEL)
+    return result
