@@ -209,7 +209,6 @@ __marimo__/
 # ======================
 # Vector DB / Storage
 # ======================
-storage/
 *.index
 *.pkl
 
@@ -237,9 +236,7 @@ __pycache__/
 
 .vscode/launch.json
 data/
-storage/
 
 # Hugging Face demo artifacts
-storage/
 *.pkl
 *.index
