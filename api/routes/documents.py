@@ -4,7 +4,6 @@ from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException
 
 from configs.config import settings
-from ingestion.ingest_documents import ingest_documents
 
 router = APIRouter()
 
@@ -30,7 +29,10 @@ async def upload_document(file: UploadFile = File(...)):
         f.write(content)
 
     try:
+        from ingestion.ingest_documents import ingest_documents
         ingest_documents(settings.DATA_DIR, settings.STORAGE_DIR)
+    except ImportError:
+        raise HTTPException(501, "Document ingestion not available in cloud deployment (requires local ML models)")
     except Exception as e:
         raise HTTPException(500, f"Ingestion failed: {e}")
 
@@ -39,11 +41,13 @@ async def upload_document(file: UploadFile = File(...)):
 
 @router.delete("/delete")
 async def delete_document(source: str):
-    from retrieval.vector_store import VectorStore
     try:
+        from retrieval.vector_store import VectorStore
         store = VectorStore.load(settings.STORAGE_DIR)
         store.delete_by_source(source)
         store.save(settings.STORAGE_DIR)
         return {"status": "deleted", "source": source}
+    except ImportError:
+        raise HTTPException(501, "Document management not available in cloud deployment")
     except Exception as e:
         raise HTTPException(500, f"Delete failed: {e}")
