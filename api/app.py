@@ -13,7 +13,14 @@ from api.routes import health, chat, documents, journal, tasks
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    logger.info(f"Starting AI Personal Assistant...")
+    logger.info(f"LLM Provider: {settings.LLM_PROVIDER}")
+    logger.info(f"Database: {settings.DATABASE_PATH}")
     init_db(settings.DATABASE_PATH)
+    logger.info("Database initialized")
     yield
 
 
