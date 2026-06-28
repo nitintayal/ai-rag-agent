@@ -1,12 +1,12 @@
 import json
-import asyncio
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from api.schemas.chat import ChatRequest, ChatResponse
+from api.dependencies import get_current_user
 from agent.runner import run_agent, run_agent_stream
 
 router = APIRouter()
@@ -14,12 +14,13 @@ logger = logging.getLogger(__name__)
 
 
 @router.post("/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
     conversation_id = req.conversation_id or str(uuid4())
+    user_id = user["id"]
 
     async def event_stream():
         try:
-            async for token in run_agent_stream(req.question, req.user_id, conversation_id):
+            async for token in run_agent_stream(req.question, user_id, conversation_id):
                 data = json.dumps({"token": token})
                 yield f"data: {data}\n\n"
             yield f"data: {json.dumps({'done': True, 'conversation_id': conversation_id})}\n\n"
@@ -32,10 +33,12 @@ async def chat(req: ChatRequest):
 
 
 @router.post("/chat/sync")
-async def chat_sync(req: ChatRequest):
+async def chat_sync(req: ChatRequest, user: dict = Depends(get_current_user)):
+    import asyncio
     conversation_id = req.conversation_id or str(uuid4())
+    user_id = user["id"]
     try:
-        result = await asyncio.to_thread(run_agent, req.question, req.user_id, conversation_id)
+        result = await asyncio.to_thread(run_agent, req.question, user_id, conversation_id)
         return ChatResponse(
             answer=result["answer"],
             sources=result.get("sources", []),

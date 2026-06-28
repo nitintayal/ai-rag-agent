@@ -36,6 +36,10 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     id          TEXT PRIMARY KEY,
     name        TEXT,
+    email       TEXT UNIQUE,
+    password    TEXT,
+    avatar_url  TEXT,
+    auth_provider TEXT NOT NULL DEFAULT 'local',
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

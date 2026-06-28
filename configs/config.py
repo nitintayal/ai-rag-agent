@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     MEMORY_EXTRACTION_ENABLED: bool = True
 
     # =========================
+    # Auth
+    # =========================
+    JWT_SECRET: str = "change-me-in-production"
+    GOOGLE_OAUTH_CLIENT_ID: Optional[str] = None
+
+    # =========================
     # Debug
     # =========================
     DEBUG: bool = False
