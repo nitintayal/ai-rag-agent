@@ -101,3 +101,51 @@ async def google_auth(body: GoogleAuthRequest):
 @router.get("/me")
 async def me(user: dict = Depends(get_current_user)):
     return user
+
+
+class UpdateProfileRequest(BaseModel):
+    name: Optional[str] = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=6)
+
+
+@router.patch("/profile")
+def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_current_user)):
+    if not body.name:
+        raise HTTPException(400, "Nothing to update")
+    from storage.database import get_connection
+    with get_connection() as conn:
+        conn.execute("UPDATE users SET name = ? WHERE id = ?", (body.name, user["id"]))
+    updated = user_repo.get_user(user["id"])
+    return updated
+
+
+@router.post("/change-password")
+def change_password(body: ChangePasswordRequest, user: dict = Depends(get_current_user)):
+    from storage.database import get_connection
+    with get_connection() as conn:
+        row = conn.execute("SELECT password, auth_provider FROM users WHERE id = ?", (user["id"],)).fetchone()
+
+    if not row:
+        raise HTTPException(404, "User not found")
+
+    user_data = dict(row)
+    if user_data.get("auth_provider") == "google" and not user_data.get("password"):
+        hashed = hash_password(body.new_password)
+        with get_connection() as conn:
+            conn.execute("UPDATE users SET password = ? WHERE id = ?", (hashed, user["id"]))
+        return {"status": "password_set"}
+
+    if not user_data.get("password"):
+        raise HTTPException(400, "No password set for this account")
+
+    if not verify_password(body.current_password, user_data["password"]):
+        raise HTTPException(401, "Current password is incorrect")
+
+    hashed = hash_password(body.new_password)
+    with get_connection() as conn:
+        conn.execute("UPDATE users SET password = ? WHERE id = ?", (hashed, user["id"]))
+    return {"status": "password_changed"}
