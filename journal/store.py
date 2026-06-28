@@ -1,1 +1,0 @@
-from journal.postgres_store import PostgresJournalStore as JournalStore

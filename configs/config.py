@@ -14,7 +14,14 @@ def _hf_default_path(local_path: str, data_path: str) -> str:
 class Settings(BaseSettings):
 
     # =========================
-    # Ollama / LLM
+    # LLM Provider: "gemini" or "ollama"
+    # =========================
+    LLM_PROVIDER: str = "ollama"
+    GOOGLE_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+
+    # =========================
+    # Ollama (when LLM_PROVIDER=ollama)
     # =========================
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_CHAT_MODEL: str = "qwen2.5:7b"

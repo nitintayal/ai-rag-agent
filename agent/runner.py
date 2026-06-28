@@ -6,7 +6,7 @@ from typing import AsyncIterator
 
 from agent.graph import agent
 from agent.state import AgentState
-from llm.ollama_client import OllamaClient
+from llm.factory import get_llm_client
 from llm.prompts import ANSWER_PROMPT, WEB_ANSWER_PROMPT
 from memory.context_builder import build_messages
 from memory.conversation_memory import ConversationMemory
@@ -39,7 +39,8 @@ def run_agent(question: str, user_id: str, conversation_id: str) -> dict:
 
 async def run_agent_stream(question: str, user_id: str, conversation_id: str) -> AsyncIterator[str]:
     """Run routing + tool execution synchronously, then stream the LLM answer."""
-    from agent.nodes import route, execute_tool, _get_llm
+    from agent.nodes import route, execute_tool
+    from llm.factory import get_llm_client
     from configs.config import settings
 
     state: AgentState = {
@@ -87,8 +88,8 @@ async def run_agent_stream(question: str, user_id: str, conversation_id: str) ->
         user_memory_context=profile_context,
     )
 
-    # Stream tokens from Ollama
-    llm = _get_llm()
+    # Stream tokens
+    llm = get_llm_client()
     full_answer = []
 
     async for token in llm.chat_stream(messages, system=None):

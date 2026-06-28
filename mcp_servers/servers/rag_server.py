@@ -13,7 +13,7 @@ mcp = FastMCP("rag")
 @mcp.tool()
 def search_documents(query: str):
     """Search the local knowledge base with the project's hybrid RAG pipeline."""
-    from agent.rag_tool import hybrid_search_documents
+    from tools.rag_tool import hybrid_search_documents
 
     context, sources, should_fallback = hybrid_search_documents(query)
     return {

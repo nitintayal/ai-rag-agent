@@ -4,8 +4,8 @@ import json
 import logging
 
 from agent.state import AgentState
-from llm.ollama_client import OllamaClient
-from llm.prompts import ROUTER_PROMPT, ANSWER_PROMPT, WEB_ANSWER_PROMPT
+from llm.factory import get_llm_client
+from llm.prompts import ROUTER_PROMPT, ANSWER_PROMPT, WEB_ANSWER_PROMPT, TOOL_ARGS_PROMPT, TOOL_SCHEMAS
 from memory.context_builder import build_messages
 from memory.conversation_memory import ConversationMemory
 from memory.long_term_memory import UserMemory
@@ -16,13 +16,8 @@ logger = logging.getLogger(__name__)
 _KEYWORD_WEB_TRIGGERS = {"latest", "current", "today", "news", "weather", "stock", "price", "now", "recent"}
 
 
-def _get_llm() -> OllamaClient:
-    from configs.config import settings
-    return OllamaClient(
-        base_url=settings.OLLAMA_BASE_URL,
-        model=settings.OLLAMA_CHAT_MODEL,
-        timeout=settings.OLLAMA_TIMEOUT,
-    )
+def _get_llm():
+    return get_llm_client()
 
 
 def _keyword_fallback_route(question: str) -> str:
@@ -67,6 +62,31 @@ def route(state: AgentState) -> dict:
     return {"tool": tool}
 
 
+# Tools that need LLM argument extraction (structured tools)
+_STRUCTURED_TOOLS = {"task", "journal", "memory", "calendar"}
+
+
+def _extract_tool_args(tool_name: str, question: str, llm) -> dict:
+    """Use the LLM to extract structured arguments for a tool from the user's question."""
+    schema = TOOL_SCHEMAS.get(tool_name, "")
+    if not schema:
+        return {}
+
+    prompt = TOOL_ARGS_PROMPT.format(tool=tool_name, question=question, tool_schema=schema)
+    try:
+        result = llm.chat(
+            [{"role": "user", "content": prompt}],
+            system="You extract tool parameters from user messages. Respond only with valid JSON.",
+            format="json",
+        )
+        args = json.loads(result)
+        logger.info(f"Extracted {tool_name} args: {args}")
+        return args
+    except Exception as e:
+        logger.debug(f"Tool arg extraction failed for {tool_name}: {e}")
+        return {}
+
+
 # ── Node: execute_tool ───────────────────────────────────────────
 
 def execute_tool(state: AgentState) -> dict:
@@ -80,10 +100,16 @@ def execute_tool(state: AgentState) -> dict:
         logger.warning(f"Unknown tool: {tool_name}")
         return {"context": "", "sources": []}
 
+    # For structured tools, extract arguments via LLM
+    extra_args = state.get("tool_args") or {}
+    if tool_name in _STRUCTURED_TOOLS and not extra_args:
+        llm = _get_llm()
+        extra_args = _extract_tool_args(tool_name, state["question"], llm)
+
     result = tool.execute(
         user_id=state["user_id"],
         query=state["question"],
-        **(state.get("tool_args") or {}),
+        **extra_args,
     )
 
     if result.error:
