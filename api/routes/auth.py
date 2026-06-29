@@ -1,7 +1,9 @@
 import logging
+import time
+from collections import defaultdict
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, Field
 
 from auth.passwords import hash_password, verify_password
@@ -13,6 +15,20 @@ from storage.repositories import user_repo
 
 router = APIRouter(prefix="/auth")
 logger = logging.getLogger(__name__)
+
+# Simple in-memory rate limiter: max 5 attempts per IP per 60 seconds
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+_RATE_LIMIT = 5
+_RATE_WINDOW = 60
+
+
+def _check_rate_limit(request: Request):
+    ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < _RATE_WINDOW]
+    if len(_login_attempts[ip]) >= _RATE_LIMIT:
+        raise HTTPException(429, "Too many login attempts. Try again in a minute.")
+    _login_attempts[ip].append(now)
 
 
 class RegisterRequest(BaseModel):
@@ -36,7 +52,8 @@ class AuthResponse(BaseModel):
 
 
 @router.post("/register", response_model=AuthResponse)
-def register(body: RegisterRequest):
+def register(body: RegisterRequest, request: Request):
+    _check_rate_limit(request)
     existing = user_repo.get_user_by_email(body.email)
     if existing:
         raise HTTPException(409, "Email already registered")
@@ -54,7 +71,8 @@ def register(body: RegisterRequest):
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(body: LoginRequest):
+def login(body: LoginRequest, request: Request):
+    _check_rate_limit(request)
     from storage.database import get_connection
     with get_connection() as conn:
         row = conn.execute("SELECT * FROM users WHERE email = ?", (body.email,)).fetchone()

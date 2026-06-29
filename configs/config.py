@@ -80,8 +80,9 @@ class Settings(BaseSettings):
     # =========================
     # Auth
     # =========================
-    JWT_SECRET: str = "change-me-in-production"
+    JWT_SECRET: str = "change-me-in-production"  # MUST override via env var in production
     GOOGLE_OAUTH_CLIENT_ID: Optional[str] = None
+    CORS_ORIGINS: str = "*"  # comma-separated, e.g. "https://ai-rag-ui.vercel.app,http://localhost:5173"
 
     # =========================
     # Debug
