@@ -103,7 +103,12 @@ class ChangePasswordRequest(BaseModel):
 
 # ── Register ─────────────────────────────────────────────────────
 
-@router.post("/register", response_model=AuthResponse)
+class RegisterResponse(BaseModel):
+    status: str
+    message: str
+
+
+@router.post("/register", response_model=RegisterResponse)
 def register(body: RegisterRequest, request: Request):
     _check_rate_limit(request)
 
@@ -112,7 +117,7 @@ def register(body: RegisterRequest, request: Request):
         raise HTTPException(409, "Email already registered")
 
     hashed = hash_password(body.password)
-    user = user_repo.create_user(
+    user_repo.create_user(
         email=body.email,
         name=body.name,
         password=hashed,
@@ -122,8 +127,7 @@ def register(body: RegisterRequest, request: Request):
     code = _create_verification_code(body.email, "email_verify")
     send_verification_email(body.email, code, settings.FRONTEND_URL)
 
-    token = create_token(user["id"], user["email"], settings.JWT_SECRET)
-    return {"token": token, "user": user}
+    return {"status": "verification_sent", "message": "Check your email for a verification link."}
 
 
 # ── Verify Email ─────────────────────────────────────────────────
@@ -136,7 +140,12 @@ def verify_email(body: VerifyEmailRequest):
     with get_connection() as conn:
         conn.execute("UPDATE users SET email_verified = 1 WHERE email = ?", (body.email,))
 
-    return {"status": "email_verified"}
+    user = user_repo.get_user_by_email(body.email)
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    token = create_token(user["id"], user["email"], settings.JWT_SECRET)
+    return {"status": "email_verified", "token": token, "user": user}
 
 
 # ── Login ────────────────────────────────────────────────────────
@@ -157,6 +166,11 @@ def login(body: LoginRequest, request: Request):
 
     if not verify_password(body.password, user_dict["password"]):
         raise HTTPException(401, "Invalid email or password")
+
+    if not user_dict.get("email_verified"):
+        code = _create_verification_code(body.email, "email_verify")
+        send_verification_email(body.email, code, settings.FRONTEND_URL)
+        raise HTTPException(403, "Email not verified. A new verification link has been sent.")
 
     user_dict.pop("password", None)
     token = create_token(user_dict["id"], user_dict["email"], settings.JWT_SECRET)
