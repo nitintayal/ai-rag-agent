@@ -13,8 +13,7 @@ class UserMemory:
         self.user_id = user_id
 
     def store(self, key: str, value: str, category: str = "general") -> dict:
-        from embeddings.sentence_embeddings import embed_query
-        embedding = embed_query(f"{key}: {value}").tolist()
+        embedding = self._safe_embed(f"{key}: {value}")
         return memory_repo.store_memory(
             self.user_id, key, value, category, embedding=embedding,
         )
@@ -24,9 +23,18 @@ class UserMemory:
         return mem["value"] if mem else None
 
     def recall_by_query(self, query: str, k: int = 5) -> list[dict]:
-        from embeddings.sentence_embeddings import embed_query
-        query_embedding = embed_query(query).tolist()
-        return memory_repo.search_memories(self.user_id, query_embedding, k=k)
+        embedding = self._safe_embed(query)
+        if not embedding:
+            return []
+        return memory_repo.search_memories(self.user_id, embedding, k=k)
+
+    @staticmethod
+    def _safe_embed(text: str) -> list[float] | None:
+        try:
+            from embeddings.sentence_embeddings import embed_query
+            return embed_query(text).tolist()
+        except ImportError:
+            return None
 
     def get_all(self, category: str | None = None) -> list[dict]:
         return memory_repo.list_memories(self.user_id, category=category)

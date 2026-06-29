@@ -53,7 +53,10 @@ def search_memories(user_id: str, query_embedding: list[float], k: int = 5) -> l
     query_vec = np.array(query_embedding, dtype="float32")
     results = []
     for row in result.data:
-        emb = np.array(json.loads(row["embedding"]), dtype="float32")
+        emb_str = row.get("embedding", "[]")
+        emb = np.array(json.loads(emb_str), dtype="float32")
+        if emb.size == 0:
+            continue
         score = float(np.dot(query_vec, emb))
         d = dict(row)
         d.pop("embedding", None)

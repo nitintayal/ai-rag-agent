@@ -37,7 +37,7 @@ def get_entry(entry_id: str, user_id: str) -> Optional[dict]:
 def add_entry(user_id: str, content: str, title: str | None = None,
               mood: str | None = None, tags: list[str] | None = None,
               entry_date: date | None = None) -> dict:
-    from embeddings.sentence_embeddings import embed_query
+    from storage.backends.embedding_utils import safe_embed
 
     now = datetime.now(timezone.utc).isoformat()
     ed = str(entry_date or date.today())
@@ -45,7 +45,7 @@ def add_entry(user_id: str, content: str, title: str | None = None,
     tag_list = tags or []
 
     search_text = _build_search_text(title, content, mood, tag_list)
-    embedding = json.dumps(embed_query(search_text).tolist())
+    embedding = safe_embed(search_text)
 
     with get_connection() as conn:
         conn.execute(
@@ -59,7 +59,7 @@ def add_entry(user_id: str, content: str, title: str | None = None,
 
 
 def update_entry(entry_id: str, user_id: str, **fields) -> Optional[dict]:
-    from embeddings.sentence_embeddings import embed_query
+    from storage.backends.embedding_utils import safe_embed
 
     current = get_entry(entry_id, user_id)
     if not current:
@@ -71,7 +71,7 @@ def update_entry(entry_id: str, user_id: str, **fields) -> Optional[dict]:
 
     now = datetime.now(timezone.utc).isoformat()
     search_text = _build_search_text(current["title"], current["content"], current["mood"], current["tags"])
-    embedding = json.dumps(embed_query(search_text).tolist())
+    embedding = safe_embed(search_text)
 
     with get_connection() as conn:
         conn.execute(
@@ -95,8 +95,6 @@ def delete_entry(entry_id: str, user_id: str) -> bool:
 
 
 def search_entries(user_id: str, query: str, k: int = 5) -> list[dict]:
-    from embeddings.sentence_embeddings import embed_query
-
     with get_connection() as conn:
         rows = conn.execute(
             """SELECT id, user_id, title, content, mood, tags, entry_date, embedding, created_at, updated_at
@@ -107,16 +105,27 @@ def search_entries(user_id: str, query: str, k: int = 5) -> list[dict]:
     if not rows:
         return []
 
-    query_vec = np.array(embed_query(query), dtype="float32")
-    results = []
-    for row in rows:
-        serialized = _serialize_row(row)
-        emb = np.array(json.loads(row["embedding"]), dtype="float32")
-        score = float(np.dot(query_vec, emb))
-        results.append({"entry": serialized, "score": score})
-
-    results.sort(key=lambda x: x["score"], reverse=True)
-    return results[:k]
+    try:
+        from embeddings.sentence_embeddings import embed_query
+        query_vec = np.array(embed_query(query), dtype="float32")
+        results = []
+        for row in rows:
+            serialized = _serialize_row(row)
+            emb = np.array(json.loads(row["embedding"]), dtype="float32")
+            if emb.size == 0:
+                continue
+            score = float(np.dot(query_vec, emb))
+            results.append({"entry": serialized, "score": score})
+        results.sort(key=lambda x: x["score"], reverse=True)
+        return results[:k]
+    except ImportError:
+        q = query.lower()
+        results = []
+        for row in rows:
+            text = f"{row['title'] or ''} {row['content'] or ''}".lower()
+            if q in text:
+                results.append({"entry": _serialize_row(row), "score": 1.0})
+        return results[:k]
 
 
 def _serialize_row(row) -> dict:

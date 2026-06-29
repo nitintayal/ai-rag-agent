@@ -33,14 +33,14 @@ def get_entry(entry_id: str, user_id: str) -> Optional[dict]:
 def add_entry(user_id: str, content: str, title: str | None = None,
               mood: str | None = None, tags: list[str] | None = None,
               entry_date: date | str | None = None) -> dict:
-    from embeddings.sentence_embeddings import embed_query
+    from storage.backends.embedding_utils import safe_embed
     sb = get_supabase()
     entry_id = str(uuid4())
     now = datetime.now(timezone.utc).isoformat()
     ed = str(entry_date or date.today())
     tag_list = tags or []
     search_text = _build_search_text(title, content, mood, tag_list)
-    embedding = json.dumps(embed_query(search_text).tolist())
+    embedding = safe_embed(search_text)
     row = {
         "id": entry_id, "user_id": user_id, "title": title, "content": content,
         "mood": mood, "tags": json.dumps(tag_list), "entry_date": ed,
@@ -52,7 +52,7 @@ def add_entry(user_id: str, content: str, title: str | None = None,
 
 
 def update_entry(entry_id: str, user_id: str, **fields) -> Optional[dict]:
-    from embeddings.sentence_embeddings import embed_query
+    from storage.backends.embedding_utils import safe_embed
     current = get_entry(entry_id, user_id)
     if not current:
         return None
@@ -61,7 +61,7 @@ def update_entry(entry_id: str, user_id: str, **fields) -> Optional[dict]:
             current[key] = val
     now = datetime.now(timezone.utc).isoformat()
     search_text = _build_search_text(current["title"], current["content"], current["mood"], current["tags"])
-    embedding = json.dumps(embed_query(search_text).tolist())
+    embedding = safe_embed(search_text)
     sb = get_supabase()
     sb.table("journal_entries").update({
         "title": current["title"], "content": current["content"], "mood": current["mood"],
@@ -78,20 +78,34 @@ def delete_entry(entry_id: str, user_id: str) -> bool:
 
 
 def search_entries(user_id: str, query: str, k: int = 5) -> list[dict]:
-    from embeddings.sentence_embeddings import embed_query
     sb = get_supabase()
     result = sb.table("journal_entries").select("*").eq("user_id", user_id).execute()
     if not result.data:
         return []
-    query_vec = np.array(embed_query(query), dtype="float32")
-    results = []
-    for row in result.data:
-        serialized = _serialize(row)
-        emb = np.array(json.loads(row["embedding"]), dtype="float32")
-        score = float(np.dot(query_vec, emb))
-        results.append({"entry": serialized, "score": score})
-    results.sort(key=lambda x: x["score"], reverse=True)
-    return results[:k]
+
+    try:
+        from embeddings.sentence_embeddings import embed_query
+        query_vec = np.array(embed_query(query), dtype="float32")
+        results = []
+        for row in result.data:
+            serialized = _serialize(row)
+            emb_str = row.get("embedding", "[]")
+            emb = np.array(json.loads(emb_str), dtype="float32")
+            if emb.size == 0:
+                continue
+            score = float(np.dot(query_vec, emb))
+            results.append({"entry": serialized, "score": score})
+        results.sort(key=lambda x: x["score"], reverse=True)
+        return results[:k]
+    except ImportError:
+        # No ML libs — fall back to text matching
+        q = query.lower()
+        results = []
+        for row in result.data:
+            text = f"{row.get('title', '')} {row.get('content', '')}".lower()
+            if q in text:
+                results.append({"entry": _serialize(row), "score": 1.0})
+        return results[:k]
 
 
 def _serialize(row: dict) -> dict:
