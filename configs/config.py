@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     # =========================
     # Storage
     # =========================
+    DB_BACKEND: str = "sqlite"  # "sqlite" or "supabase" (or "postgres", "mongodb" when implemented)
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_KEY: Optional[str] = None
     DATA_DIR: str = _hf_default_path("data/files", "data/files")
     STORAGE_DIR: str = _hf_default_path("data/storage", "data/storage")
     DATABASE_PATH: str = _hf_default_path("data/db/assistant.db", "data/db/assistant.db")

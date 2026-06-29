@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from configs.config import settings
-from storage.database import init_db
+from storage.factory import get_backend
 
 from api.routes import health, auth, chat, conversations, documents, journal, tasks
 
@@ -18,9 +18,9 @@ async def lifespan(app: FastAPI):
     logger = logging.getLogger(__name__)
     logger.info(f"Starting AI Personal Assistant...")
     logger.info(f"LLM Provider: {settings.LLM_PROVIDER}")
-    logger.info(f"Database: {settings.DATABASE_PATH}")
-    init_db(settings.DATABASE_PATH)
-    logger.info("Database initialized")
+    logger.info(f"DB Backend: {settings.DB_BACKEND}")
+    get_backend()
+    logger.info("Storage backend initialized")
     yield
 
 
