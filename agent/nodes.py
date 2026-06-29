@@ -89,27 +89,28 @@ def execute_tool(state: AgentState) -> dict:
     """Execute one or more tools and combine context."""
     tools_plan = state.get("tools_plan")
 
+    def _run_tool(tool_name, args):
+        tool = get_tool(tool_name)
+        if not tool:
+            return None
+        merged = {"query": state["question"], **args}
+        return tool.execute(user_id=state["user_id"], **merged)
+
     # Multi-tool: execute all and merge context
     if tools_plan and len(tools_plan) > 1:
         all_context = []
         all_sources = []
         for plan in tools_plan:
-            tool_name = plan["tool"]
-            if tool_name == "direct":
+            if plan["tool"] == "direct":
                 continue
-            tool = get_tool(tool_name)
-            if not tool:
+            result = _run_tool(plan["tool"], plan.get("args", {}))
+            if not result:
                 continue
-            result = tool.execute(
-                user_id=state["user_id"],
-                query=state["question"],
-                **plan.get("args", {}),
-            )
             if result.ok and result.context:
-                all_context.append(f"[{tool_name.upper()} results]\n{result.context}")
+                all_context.append(f"[{plan['tool'].upper()} results]\n{result.context}")
                 all_sources.extend(result.sources or [])
             elif result.error:
-                logger.error(f"Tool {tool_name} error: {result.error}")
+                logger.error(f"Tool {plan['tool']} error: {result.error}")
 
         return {"context": "\n\n".join(all_context), "sources": all_sources}
 
@@ -118,16 +119,9 @@ def execute_tool(state: AgentState) -> dict:
     if tool_name == "direct":
         return {"context": "", "sources": []}
 
-    tool = get_tool(tool_name)
-    if not tool:
-        logger.warning(f"Unknown tool: {tool_name}")
+    result = _run_tool(tool_name, state.get("tool_args") or {})
+    if not result:
         return {"context": "", "sources": []}
-
-    result = tool.execute(
-        user_id=state["user_id"],
-        query=state["question"],
-        **(state.get("tool_args") or {}),
-    )
 
     if result.error:
         logger.error(f"Tool {tool_name} error: {result.error}")

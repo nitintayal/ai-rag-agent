@@ -20,6 +20,5 @@ async def get_current_user(authorization: Optional[str] = Header(default=None)) 
 
     user = user_repo.get_user(payload["sub"])
     if not user:
-        raise HTTPException(401, "User not found")
-
+        user = user_repo.ensure_user(payload["sub"], payload.get("email", ""))
     return user
