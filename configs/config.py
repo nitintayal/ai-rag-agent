@@ -86,6 +86,7 @@ class Settings(BaseSettings):
     RESEND_API_KEY: Optional[str] = None
     RESEND_FROM_EMAIL: str = "ai-personal-agent@resend.dev"
     FRONTEND_URL: str = "http://localhost:5173"
+    REQUIRE_EMAIL_VERIFICATION: bool = False
 
     # =========================
     # Debug

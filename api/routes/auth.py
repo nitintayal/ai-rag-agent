@@ -108,7 +108,7 @@ class RegisterResponse(BaseModel):
     message: str
 
 
-@router.post("/register", response_model=RegisterResponse)
+@router.post("/register")
 def register(body: RegisterRequest, request: Request):
     _check_rate_limit(request)
 
@@ -117,17 +117,23 @@ def register(body: RegisterRequest, request: Request):
         raise HTTPException(409, "Email already registered")
 
     hashed = hash_password(body.password)
-    user_repo.create_user(
+    user = user_repo.create_user(
         email=body.email,
         name=body.name,
         password=hashed,
         auth_provider="local",
     )
 
-    code = _create_verification_code(body.email, "email_verify")
-    send_verification_email(body.email, code, settings.FRONTEND_URL)
+    if settings.REQUIRE_EMAIL_VERIFICATION:
+        code = _create_verification_code(body.email, "email_verify")
+        send_verification_email(body.email, code, settings.FRONTEND_URL)
+        return {"status": "verification_sent", "message": "Check your email for a verification link."}
 
-    return {"status": "verification_sent", "message": "Check your email for a verification link."}
+    with get_connection() as conn:
+        conn.execute("UPDATE users SET email_verified = 1 WHERE email = ?", (body.email,))
+    user = user_repo.get_user_by_email(body.email)
+    token = create_token(user["id"], user["email"], settings.JWT_SECRET)
+    return {"status": "ok", "token": token, "user": user}
 
 
 # ── Verify Email ─────────────────────────────────────────────────
@@ -167,7 +173,7 @@ def login(body: LoginRequest, request: Request):
     if not verify_password(body.password, user_dict["password"]):
         raise HTTPException(401, "Invalid email or password")
 
-    if not user_dict.get("email_verified"):
+    if settings.REQUIRE_EMAIL_VERIFICATION and not user_dict.get("email_verified"):
         code = _create_verification_code(body.email, "email_verify")
         send_verification_email(body.email, code, settings.FRONTEND_URL)
         raise HTTPException(403, "Email not verified. A new verification link has been sent.")
