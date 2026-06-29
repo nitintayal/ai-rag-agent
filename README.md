@@ -1,377 +1,387 @@
 # AI Personal Assistant
 
-A full-stack AI personal assistant powered by local LLMs (Ollama), with RAG document search, web search, journal, task management, persistent memory, and calendar — all running privately on your machine. No cloud API keys required.
+A full-stack AI personal assistant with chat, RAG document search, web search, journal, task management, persistent memory, calendar, and authentication — deployable locally with Ollama or in the cloud with Gemini + Supabase.
+
+**Live Demo:** [ai-rag-ui.vercel.app](https://ai-rag-ui.vercel.app)
 
 ## Features
 
 - **Chat with real-time streaming** — token-by-token responses via Server-Sent Events (SSE)
-- **RAG document search** — upload PDFs, TXT, XLSX, CSV and ask questions with hybrid retrieval (FAISS vector search + BM25 keyword search + cross-encoder reranking)
-- **Web search** — routes time-sensitive queries to DuckDuckGo with parallel page content extraction via trafilatura
-- **Task management** — create, complete, filter, and track tasks with priorities (low/medium/high) and due dates
-- **Journal** — personal journal with full CRUD, mood tagging, and semantic search powered by sentence embeddings
-- **Persistent memory** — remembers user preferences and facts across conversations using embedding-based recall
+- **Multi-tool per turn** — agent can call multiple tools in one message (e.g. "show my tasks and search journal")
+- **RAG document search** — upload PDFs, TXT, XLSX, CSV and ask questions with hybrid retrieval (FAISS + BM25 + cross-encoder reranking)
+- **Web search** — routes time-sensitive queries to DuckDuckGo with parallel page content extraction
+- **Task management** — create, complete, filter, and track tasks with priorities and due dates
+- **Journal** — personal journal with CRUD, mood tagging, and semantic search
+- **Persistent memory** — remembers user preferences and facts across conversations
 - **Calendar** — simple event management with date/time tracking
-- **Conversation history** — multi-turn context within sessions, stored in SQLite
-- **Intelligent tool routing** — LLM-powered router with keyword fallback automatically selects the right tool per query
-- **Memory extraction** — optionally extracts and stores personal facts from conversations for future context
+- **Conversation history** — multi-turn context with past chat sidebar
+- **Intelligent routing** — single LLM call picks the right tool(s) and extracts arguments
+- **Authentication** — JWT-based auth with email/password + Google OAuth
+- **Email verification** — optional via Resend (configurable)
+- **Dark mode** — system-aware with manual toggle
+- **Voice input** — browser Speech-to-Text for hands-free input
+- **Mobile PWA** — installable as a native app on iPhone/Android
+- **Plug-and-play database** — switch between SQLite, Supabase, or add your own backend via config
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│  Frontend: React + Tailwind CSS + Vite                   │
-│  Chat (SSE) │ Tasks Panel │ Journal Panel │ File Upload   │
-└─────────────────────────┬────────────────────────────────┘
-                          │ HTTP / SSE
-┌─────────────────────────▼────────────────────────────────┐
-│  API Layer (FastAPI)                                     │
-│  POST /chat  │ /tasks  │ /journal  │ /upload  │ /health  │
-└─────────────────────────┬────────────────────────────────┘
-                          │
-┌─────────────────────────▼────────────────────────────────┐
-│  Agent Layer (LangGraph StateGraph)                      │
-│  route → execute_tool → generate → extract_memory        │
-└────────┬────────────┬────────────┬───────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Frontend: React 19 + Tailwind CSS + Vite                    │
+│  Chat (SSE) │ Tasks │ Journal │ Settings │ Dark Mode │ Voice  │
+└──────────────────────────┬───────────────────────────────────┘
+                           │ HTTP / SSE
+┌──────────────────────────▼───────────────────────────────────┐
+│  API Layer (FastAPI)                                         │
+│  /auth  /chat  /conversations  /tasks  /journal  /upload     │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+┌──────────────────────────▼───────────────────────────────────┐
+│  Agent Layer (LangGraph StateGraph)                          │
+│  route → execute_tool(s) → generate → extract_memory         │
+└────────┬────────────┬────────────┬───────────────────────────┘
          │            │            │
     ┌────▼────┐  ┌────▼────┐  ┌───▼─────┐
     │  LLM    │  │  Tools  │  │  Memory │
-    │ (Ollama)│  │  (6)    │  │         │
-    └─────────┘  └────┬────┘  └───┬─────┘
-                      │           │
+    │ Gemini/ │  │  (6)    │  │         │
+    │ Ollama  │  └────┬────┘  └───┬─────┘
+    └─────────┘       │           │
                ┌──────▼──────┐ ┌──▼────────┐
                │  Retrieval  │ │  Storage   │
-               │ FAISS+BM25  │ │  SQLite    │
-               └─────────────┘ └────────────┘
+               │ FAISS+BM25  │ │ SQLite/    │
+               └─────────────┘ │ Supabase   │
+                               └────────────┘
 ```
 
-### Layered Architecture
-
-The codebase is organized into 7 independent layers with strict top-down dependencies (no circular imports):
+### Layered Architecture (8 layers)
 
 ```
-API Layer  →  Agent Layer  →  LLM Layer
+API Layer  →  Auth Layer
+           →  Agent Layer  →  LLM Layer (Gemini / Ollama)
                             →  Tool Layer  →  Retrieval Layer
-                                           →  Storage Layer
+                                           →  Storage Layer (plug-and-play)
                             →  Memory Layer →  Storage Layer
 ```
 
 | Layer | Purpose | Key Files |
 |-------|---------|-----------|
-| **API** | FastAPI endpoints, SSE streaming, request/response schemas | `api/app.py`, `api/routes/`, `api/schemas/` |
-| **Agent** | LangGraph state graph, tool orchestration, sync + streaming runners | `agent/graph.py`, `agent/nodes.py`, `agent/runner.py` |
-| **LLM** | Ollama REST client (sync, async, streaming), prompt templates, model management | `llm/ollama_client.py`, `llm/prompts.py`, `llm/model_manager.py` |
-| **Tools** | 6 independent tools with uniform `BaseTool` interface and registry | `tools/base.py`, `tools/registry.py`, `tools/*.py` |
-| **Memory** | Conversation history (per-session), long-term user facts (cross-session), context builder | `memory/conversation_memory.py`, `memory/long_term_memory.py`, `memory/context_builder.py` |
-| **Retrieval** | FAISS vector index, BM25 keyword index, hybrid search, cross-encoder reranking, document ingestion | `retrieval/`, `embeddings/`, `ranker/`, `ingestion/` |
-| **Storage** | SQLite database, schema management, repository pattern for all entities | `storage/database.py`, `storage/repositories/` |
+| **API** | FastAPI endpoints, SSE streaming, request schemas | `api/app.py`, `api/routes/` |
+| **Auth** | JWT tokens, password hashing, Google OAuth, email verification | `auth/`, `api/routes/auth.py` |
+| **Agent** | LangGraph graph, multi-tool orchestration, sync + streaming | `agent/graph.py`, `agent/nodes.py`, `agent/runner.py` |
+| **LLM** | Gemini + Ollama clients, prompt templates, model management | `llm/factory.py`, `llm/gemini_client.py`, `llm/ollama_client.py` |
+| **Tools** | 6 tools with uniform `BaseTool` interface and registry | `tools/base.py`, `tools/registry.py`, `tools/*.py` |
+| **Memory** | Conversation history + long-term user facts + context builder | `memory/` |
+| **Retrieval** | FAISS + BM25 hybrid search, cross-encoder reranking, ingestion | `retrieval/`, `embeddings/`, `ranker/`, `ingestion/` |
+| **Storage** | Plug-and-play database with abstract base + SQLite/Supabase backends | `storage/factory.py`, `storage/backends/` |
 
 ### Tools
 
-| Tool | Description | Backing |
-|------|-------------|---------|
-| `rag` | Hybrid search over uploaded documents with reranking | FAISS + BM25 + cross-encoder |
-| `web` | DuckDuckGo search with parallel page content extraction | ddgs + trafilatura |
-| `journal` | Journal entries — create, search, list | SQLite + sentence embeddings |
-| `task` | Task/reminder management with status, priority, due dates | SQLite |
-| `memory` | Store and recall user preferences and facts | SQLite + sentence embeddings |
-| `calendar` | Calendar event management | SQLite |
+| Tool | Description |
+|------|-------------|
+| `rag` | Hybrid search over uploaded documents with reranking |
+| `web` | DuckDuckGo search with parallel page content extraction |
+| `journal` | Journal entries with semantic search |
+| `task` | Task/reminder management with status, priority, due dates |
+| `memory` | Store and recall user preferences and facts |
+| `calendar` | Calendar event management |
 
-### Agent Flow
+### Plug-and-Play Database
 
-The LangGraph agent processes each query through this graph:
-
-```
-1. ROUTE      → LLM decides which tool to use (with keyword fallback)
-                 "rag" | "web" | "journal" | "task" | "memory" | "calendar" | "direct"
-
-2. EXECUTE    → Selected tool runs and returns context + sources
-                 (skipped for "direct" — simple questions answered without tools)
-
-3. GENERATE   → LLM produces the answer using:
-                 - Tool context (search results, task list, etc.)
-                 - Conversation history (last 20 messages)
-                 - User memory (known preferences and facts)
-
-4. EXTRACT    → (Optional) LLM extracts memorable facts from the exchange
-                 e.g., "user prefers Python" → stored for future conversations
-```
-
-### How Memory Works
-
-**Short-term (conversation memory):**
-- Every message (user + assistant) is stored in SQLite per `conversation_id`
-- On each turn, the last 20 messages are loaded as context for the LLM
-- The frontend generates a `conversation_id` per chat session
-
-**Long-term (user memory):**
-- Personal facts are extracted from conversations via an LLM call (configurable)
-- Facts are stored as key-value pairs with sentence embeddings
-- On each turn, relevant facts are recalled via semantic search and injected into the system prompt
-- Example: user says "I'm a data scientist" → stored → future responses are tailored accordingly
-
-### Retrieval Pipeline
-
-When the `rag` tool is selected:
+The storage layer uses an abstract base class pattern. Switch backends by changing one env var:
 
 ```
-Query
-  ↓
-Embed query (sentence-transformers/all-MiniLM-L6-v2)
-  ↓
-Hybrid search:
-  ├── FAISS vector search (cosine similarity, weight: 0.7)
-  ├── BM25 keyword search (weight: 0.3)
-  └── Merge + normalize scores
-  ↓
-Filter by MIN_HYBRID_SCORE (0.15)
-  ↓
-Cross-encoder reranking (ms-marco-MiniLM-L-6-v2)
-  ↓
-Filter by MIN_RERANK_SCORE (0.10)
-  ↓
-Top-K documents → formatted context for LLM
+DB_BACKEND=sqlite     # Local file-based (default)
+DB_BACKEND=supabase   # Cloud Postgres via Supabase
 ```
 
-Document ingestion: files are loaded (PDF/TXT/XLSX/CSV) → chunked by token count (400 tokens, 80 overlap via tiktoken) → embedded → stored in FAISS index.
+To add a new backend (Postgres, MongoDB, MySQL, etc.):
+1. Create `storage/backends/mydb/` with 5 repo modules
+2. Each module implements the same function signatures (see `storage/backends/base.py`)
+3. Add an `elif` in `storage/factory.py`
+4. Set `DB_BACKEND=mydb`
+
+Zero changes to API routes, agent, memory, tools, or frontend.
+
+### LLM Provider
+
+Switch between local and cloud LLMs:
+
+```
+LLM_PROVIDER=gemini   # Google Gemini API (cloud, free tier)
+LLM_PROVIDER=ollama   # Local Ollama (requires 8GB+ RAM)
+```
+
+Gemini client includes retry + fallback across models (2.5-flash → 2.0-flash → 2.0-flash-lite).
 
 ## Project Structure
 
 ```
 ai-rag-agent/
-├── api/                          # API Layer
-│   ├── app.py                    #   FastAPI app, CORS, lifespan
+├── api/                              # API Layer
+│   ├── app.py                        #   FastAPI app, CORS, lifespan
+│   ├── dependencies.py               #   Auth dependency (get_current_user)
 │   ├── routes/
-│   │   ├── chat.py               #   POST /chat (SSE), POST /chat/sync
-│   │   ├── documents.py          #   POST /upload, DELETE /delete
-│   │   ├── journal.py            #   /journal/* CRUD + search
-│   │   ├── tasks.py              #   /tasks/* CRUD
-│   │   └── health.py             #   GET /health, /status
-│   └── schemas/
-│       ├── chat.py               #   ChatRequest, ChatResponse
-│       └── tasks.py              #   TaskCreate, TaskUpdate
+│   │   ├── auth.py                   #   Register, login, Google OAuth, forgot/reset password
+│   │   ├── chat.py                   #   POST /chat (SSE streaming)
+│   │   ├── conversations.py          #   Chat history CRUD
+│   │   ├── documents.py              #   File upload/delete
+│   │   ├── journal.py                #   Journal CRUD + search
+│   │   ├── tasks.py                  #   Task CRUD
+│   │   └── health.py                 #   Health + status
+│   └── schemas/                      #   Pydantic models
 │
-├── agent/                        # Agent Layer
-│   ├── graph.py                  #   LangGraph StateGraph definition
-│   ├── state.py                  #   AgentState TypedDict
-│   ├── nodes.py                  #   Graph nodes: route, execute_tool, generate, extract_memory
-│   └── runner.py                 #   run_agent() sync + run_agent_stream() async
+├── auth/                             # Auth Layer
+│   ├── passwords.py                  #   bcrypt hashing
+│   ├── jwt_utils.py                  #   JWT create/decode
+│   ├── google_oauth.py               #   Google ID token verification
+│   └── email.py                      #   Resend email integration
 │
-├── llm/                          # LLM Layer
-│   ├── ollama_client.py          #   OllamaClient: chat, generate, chat_stream
-│   ├── prompts.py                #   System, router, answer, memory extraction prompts
-│   └── model_manager.py          #   Check/list/pull Ollama models
+├── agent/                            # Agent Layer
+│   ├── graph.py                      #   LangGraph StateGraph
+│   ├── state.py                      #   AgentState TypedDict
+│   ├── nodes.py                      #   route, execute_tool(s), generate, extract_memory
+│   └── runner.py                     #   Sync + streaming entry points
 │
-├── tools/                        # Tool Layer
-│   ├── base.py                   #   BaseTool ABC, ToolResult, ToolDefinition
-│   ├── registry.py               #   Tool registry: get_all_tools(), get_tool()
-│   ├── rag_tool.py               #   RAG hybrid search tool
-│   ├── web_tool.py               #   Web search tool
-│   ├── journal_tool.py           #   Journal CRUD + search tool
-│   ├── task_tool.py              #   Task management tool
-│   ├── memory_tool.py            #   User memory store/recall tool
-│   └── calendar_tool.py          #   Calendar event tool
+├── llm/                              # LLM Layer
+│   ├── factory.py                    #   Returns Gemini or Ollama client based on config
+│   ├── gemini_client.py              #   Gemini API with retry + model fallback
+│   ├── ollama_client.py              #   Ollama REST client (sync + async + streaming)
+│   ├── prompts.py                    #   All prompt templates
+│   └── model_manager.py              #   Ollama model availability checks
 │
-├── memory/                       # Memory Layer
-│   ├── conversation_memory.py    #   Per-session message history
-│   ├── long_term_memory.py       #   Cross-session user facts with semantic recall
-│   └── context_builder.py        #   Builds LLM message list from all context sources
+├── tools/                            # Tool Layer
+│   ├── base.py                       #   BaseTool ABC, ToolResult, ToolDefinition
+│   ├── registry.py                   #   Tool registry
+│   ├── rag_tool.py                   #   RAG hybrid search
+│   ├── web_tool.py                   #   Web search (DuckDuckGo + trafilatura)
+│   ├── journal_tool.py               #   Journal CRUD + search
+│   ├── task_tool.py                  #   Task management
+│   ├── memory_tool.py                #   User memory store/recall
+│   └── calendar_tool.py              #   Calendar events
 │
-├── retrieval/                    # Retrieval Layer
-│   └── vector_store.py           #   FAISS + BM25 hybrid search
+├── memory/                           # Memory Layer
+│   ├── conversation_memory.py        #   Per-session message history
+│   ├── long_term_memory.py           #   Cross-session user facts
+│   └── context_builder.py            #   Builds LLM message list
 │
+├── storage/                          # Storage Layer (plug-and-play)
+│   ├── factory.py                    #   Backend picker (sqlite/supabase/...)
+│   ├── database.py                   #   SQLite engine + schema
+│   ├── repositories/                 #   Public API (thin dispatchers)
+│   │   ├── user_repo.py
+│   │   ├── conversation_repo.py
+│   │   ├── journal_repo.py
+│   │   ├── task_repo.py
+│   │   └── memory_repo.py
+│   └── backends/
+│       ├── base.py                   #   Abstract base classes for all repos
+│       ├── embedding_utils.py        #   Safe embedding helper (ML-optional)
+│       ├── sqlite/                   #   SQLite implementation
+│       │   ├── user_repo.py
+│       │   ├── conversation_repo.py
+│       │   ├── journal_repo.py
+│       │   ├── task_repo.py
+│       │   └── memory_repo.py
+│       └── supabase/                 #   Supabase implementation
+│           ├── client.py             #   Supabase client singleton
+│           ├── schema.sql            #   Table creation SQL
+│           ├── user_repo.py
+│           ├── conversation_repo.py
+│           ├── journal_repo.py
+│           ├── task_repo.py
+│           └── memory_repo.py
+│
+├── retrieval/                        # Retrieval Layer
+│   └── vector_store.py               #   FAISS + BM25 hybrid search
 ├── embeddings/
-│   └── sentence_embeddings.py    #   SentenceTransformer wrapper
-│
+│   └── sentence_embeddings.py        #   SentenceTransformer wrapper
 ├── ranker/
-│   └── cross_encoder.py          #   Cross-encoder reranking
+│   └── cross_encoder.py              #   Cross-encoder reranking
+├── ingestion/                        #   Document ingestion pipeline
+│   ├── load_documents.py             #   PDF, TXT, XLSX, CSV loaders
+│   ├── chunk_documents.py            #   Token-based chunking (tiktoken)
+│   └── ingest_documents.py           #   Orchestration
 │
-├── ingestion/                    # Document Ingestion
-│   ├── load_documents.py         #   PDF, TXT, XLSX, CSV loaders
-│   ├── chunk_documents.py        #   Token-based chunking (tiktoken)
-│   └── ingest_documents.py       #   Orchestration: load → chunk → embed → store
-│
-├── storage/                      # Storage Layer
-│   ├── database.py               #   SQLite setup, schema, connection manager
-│   └── repositories/
-│       ├── user_repo.py          #   User profiles
-│       ├── conversation_repo.py  #   Conversations + messages
-│       ├── journal_repo.py       #   Journal entries
-│       ├── task_repo.py          #   Tasks
-│       └── memory_repo.py        #   User memories
-│
-├── mcp_servers/                  # MCP Tool Servers (stdio)
-│   ├── servers.json              #   Server config
-│   ├── client/
-│   │   └── mcp_client.py         #   MCP stdio client
+├── mcp_servers/                      #   MCP Tool Servers (stdio)
+│   ├── servers.json
+│   ├── client/mcp_client.py
 │   └── servers/
-│       ├── rag_server.py         #   search_documents() MCP server
-│       ├── web_server.py         #   search_web() MCP server
-│       └── journal_server.py     #   Journal CRUD MCP server
+│       ├── rag_server.py
+│       ├── web_server.py
+│       └── journal_server.py
 │
-├── configs/
-│   └── config.py                 #   Pydantic BaseSettings (.env loader)
-│
-├── data/                         #   (gitignored) runtime data
-│   ├── files/                    #   Uploaded documents
-│   ├── storage/                  #   FAISS index + pickled documents
-│   └── db/                       #   SQLite databases
-│
-├── .env.example                  #   Configuration template
-├── requirements.txt              #   Python dependencies
-├── Dockerfile                    #   Container build
-└── docker-compose.yml            #   Docker Compose setup
+├── configs/config.py                 #   Pydantic BaseSettings
+├── start.py                          #   Cloud entry point (Render)
+├── render.yaml                       #   Render blueprint
+├── .env.example                      #   Config template
+├── requirements.txt                  #   Full dependencies (local)
+└── requirements-cloud.txt            #   Cloud dependencies (no torch)
 ```
 
 ## Getting Started
 
-### Prerequisites
-
-- Python 3.11+
-- [Ollama](https://ollama.com/download) installed and running
-- Node.js 18+ (for the frontend)
-
-### 1. Install Ollama
-
-Download from [ollama.com/download](https://ollama.com/download), install, and launch it. Then pull the model:
+### Option 1: Local Development (Ollama)
 
 ```bash
-ollama pull qwen2.5:7b
-```
-
-This downloads ~4.7 GB. Requires ~8 GB free RAM to run.
-
-### 2. Backend Setup
-
-```bash
+# Clone
+git clone https://github.com/nitintayal/ai-rag-agent.git
 cd ai-rag-agent
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate
-
-# Install dependencies
+# Setup
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
-# Copy and configure environment
+# Configure
 cp .env.example .env
+# Set LLM_PROVIDER=ollama, DB_BACKEND=sqlite
 
-# Start the server
+# Install Ollama + model
+# Download from https://ollama.com/download
+ollama pull qwen2.5:7b
+
+# Run
 python -m api.app
 ```
 
-The API runs at `http://localhost:8000`.
-- `http://localhost:8000/health` — health check
-- `http://localhost:8000/status` — system status (Ollama connectivity, models, features)
-- `http://localhost:8000/docs` — interactive API docs (Swagger)
+### Option 2: Cloud Deployment (Gemini + Supabase)
 
-### 3. Frontend Setup
+**Backend (Render):**
+1. Push to GitHub
+2. Create Render Web Service → connect repo
+3. Build: `pip install -r requirements-cloud.txt`
+4. Start: `PYTHONPATH=/opt/render/project/src python start.py`
+5. Set env vars: `LLM_PROVIDER=gemini`, `GOOGLE_API_KEY`, `DB_BACKEND=supabase`, `SUPABASE_URL`, `SUPABASE_KEY`, `JWT_SECRET`
+
+**Frontend (Vercel):**
+1. Push `ai-rag-ui` to GitHub
+2. Import in Vercel
+3. Set `VITE_API_BASE=https://your-render-url.onrender.com`
+
+**Supabase:**
+1. Create project at [supabase.com](https://supabase.com)
+2. Run `storage/backends/supabase/schema.sql` in SQL Editor
+3. Copy URL + service_role key to Render env vars
+
+### Frontend Setup
 
 ```bash
 cd ai-rag-ui
-
 npm install
 npm run dev
 ```
 
-Opens at `http://localhost:5173`.
-
 ## Configuration Reference
-
-All settings are in `.env` (loaded via Pydantic BaseSettings):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| **LLM** | | |
+| `LLM_PROVIDER` | `ollama` | `ollama` or `gemini` |
+| `GOOGLE_API_KEY` | — | Gemini API key (when provider=gemini) |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model name |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
-| `OLLAMA_CHAT_MODEL` | `qwen2.5:7b` | Model for chat and routing |
-| `OLLAMA_TIMEOUT` | `120` | Request timeout in seconds |
-| `EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | Embedding model for retrieval + memory |
-| `RERANK_MODEL` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Cross-encoder for reranking |
-| `VECTOR_WEIGHT` | `0.7` | Weight for vector search in hybrid |
-| `BM25_WEIGHT` | `0.3` | Weight for BM25 in hybrid |
-| `HYBRID_K` | `10` | Number of candidates from hybrid search |
-| `RERANK_K` | `5` | Number of documents after reranking |
-| `MIN_HYBRID_SCORE` | `0.15` | Minimum score to pass hybrid search |
-| `MIN_RERANK_SCORE` | `0.10` | Minimum score to pass reranking |
-| `CHUNK_SIZE` | `400` | Token count per chunk |
-| `CHUNK_OVERLAP` | `80` | Overlap between chunks in tokens |
-| `WEB_SEARCH_MAX_RESULTS` | `3` | Max DuckDuckGo results per query |
-| `API_PORT` | `8000` | FastAPI server port |
-| `DATABASE_PATH` | `data/db/assistant.db` | SQLite database path |
-| `DATA_DIR` | `data/files` | Uploaded document storage |
-| `STORAGE_DIR` | `data/storage` | FAISS index storage |
-| `CONVERSATION_HISTORY_LIMIT` | `20` | Messages loaded per conversation turn |
-| `MEMORY_EXTRACTION_ENABLED` | `true` | Extract user facts from conversations |
-| `DEBUG` | `false` | Enable debug mode with auto-reload |
+| `OLLAMA_CHAT_MODEL` | `qwen2.5:7b` | Ollama model name |
+| **Database** | | |
+| `DB_BACKEND` | `sqlite` | `sqlite` or `supabase` |
+| `DATABASE_PATH` | `data/db/assistant.db` | SQLite file path |
+| `SUPABASE_URL` | — | Supabase project URL |
+| `SUPABASE_KEY` | — | Supabase service_role key |
+| **Auth** | | |
+| `JWT_SECRET` | `change-me...` | JWT signing secret |
+| `GOOGLE_OAUTH_CLIENT_ID` | — | For Google login |
+| `CORS_ORIGINS` | `*` | Comma-separated allowed origins |
+| `REQUIRE_EMAIL_VERIFICATION` | `false` | Gate login behind email verify |
+| `RESEND_API_KEY` | — | Resend.com API key for emails |
+| `RESEND_FROM_EMAIL` | `onboarding@resend.dev` | Sender email |
+| `FRONTEND_URL` | `http://localhost:5173` | For email verification links |
+| **Retrieval** | | |
+| `VECTOR_WEIGHT` | `0.7` | Vector search weight in hybrid |
+| `BM25_WEIGHT` | `0.3` | BM25 weight in hybrid |
+| `HYBRID_K` | `10` | Candidates from hybrid search |
+| `RERANK_K` | `5` | Documents after reranking |
+| `MIN_HYBRID_SCORE` | `0.15` | Minimum hybrid score |
+| `MIN_RERANK_SCORE` | `0.10` | Minimum rerank score |
+| **Other** | | |
+| `CONVERSATION_HISTORY_LIMIT` | `20` | Messages per conversation turn |
+| `MEMORY_EXTRACTION_ENABLED` | `true` | Auto-extract user facts |
+| `WEB_SEARCH_MAX_RESULTS` | `3` | DuckDuckGo results per query |
+| `API_PORT` | `8000` | Server port |
+| `DEBUG` | `false` | Enable auto-reload |
 
 ## API Endpoints
 
+### Auth
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/register` | Register with email/password |
+| POST | `/auth/login` | Login |
+| POST | `/auth/google` | Google OAuth login |
+| GET | `/auth/me` | Get current user |
+| PATCH | `/auth/profile` | Update display name |
+| POST | `/auth/change-password` | Change password |
+| POST | `/auth/forgot-password` | Send reset email |
+| POST | `/auth/reset-password` | Reset with code |
+| POST | `/auth/verify-email` | Verify email with code |
+
 ### Chat
-
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/chat` | Chat with SSE streaming. Body: `{question, user_id?, conversation_id?}` |
-| POST | `/chat/sync` | Chat without streaming. Returns `{answer, sources, tool}` |
-
-### Documents
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/upload` | Upload a document (PDF, TXT, XLSX, CSV). Multipart form with `file` field |
-| DELETE | `/delete?source=filename` | Remove a document from the index |
+| POST | `/chat` | SSE streaming chat |
+| POST | `/chat/sync` | Non-streaming chat |
+| GET | `/conversations` | List past conversations |
+| GET | `/conversations/{id}/messages` | Load conversation messages |
+| DELETE | `/conversations/{id}` | Delete conversation |
 
 ### Tasks
-
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/tasks?user_id=&status=` | List tasks, optionally filtered by status |
-| POST | `/tasks?user_id=` | Create a task. Body: `{title, description?, due_date?, priority?}` |
-| GET | `/tasks/{id}?user_id=` | Get a single task |
-| PATCH | `/tasks/{id}?user_id=` | Update a task. Body: `{title?, status?, priority?, due_date?}` |
-| DELETE | `/tasks/{id}?user_id=` | Delete a task |
+| GET | `/tasks` | List tasks (filterable by status) |
+| POST | `/tasks` | Create task |
+| PATCH | `/tasks/{id}` | Update task |
+| DELETE | `/tasks/{id}` | Delete task |
 
 ### Journal
-
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/journal/entries?user_id=&limit=&offset=` | List entries with pagination |
-| POST | `/journal/entries` | Create an entry. Body: `{user_id, content, title?, mood?}` |
-| GET | `/journal/entries/{id}?user_id=` | Get a single entry |
-| PATCH | `/journal/entries/{id}?user_id=` | Update an entry |
-| DELETE | `/journal/entries/{id}?user_id=` | Delete an entry |
-| POST | `/journal/search` | Semantic search. Body: `{user_id, query, k?}` |
+| GET | `/journal/entries` | List entries (paginated) |
+| POST | `/journal/entries` | Create entry |
+| PATCH | `/journal/entries/{id}` | Update entry |
+| DELETE | `/journal/entries/{id}` | Delete entry |
+| POST | `/journal/search` | Semantic search |
 
-### System
-
+### Documents & System
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/health` | Returns `{status: "ok"}` |
-| GET | `/status` | Full system status: Ollama, models, features |
+| POST | `/upload` | Upload document |
+| DELETE | `/delete?source=` | Remove document |
+| GET | `/health` | Health check |
+| GET | `/status` | System status |
 
 ## Tech Stack
 
 | Component | Technology |
 |-----------|-----------|
-| **Backend framework** | FastAPI with uvicorn |
-| **Agent orchestration** | LangGraph (StateGraph) |
-| **LLM runtime** | Ollama (local, qwen2.5:7b) |
-| **Vector search** | FAISS (IndexFlatIP) |
-| **Keyword search** | rank-bm25 |
-| **Reranking** | sentence-transformers CrossEncoder |
+| **Backend** | Python, FastAPI, LangGraph |
+| **LLM** | Google Gemini (cloud) / Ollama (local) |
+| **Database** | Supabase (cloud) / SQLite (local) |
+| **Auth** | JWT + bcrypt + Google OAuth |
+| **Email** | Resend |
+| **Vector search** | FAISS + rank-bm25 + CrossEncoder |
 | **Embeddings** | sentence-transformers (all-MiniLM-L6-v2) |
-| **Database** | SQLite with WAL mode |
 | **Web search** | DuckDuckGo (ddgs) + trafilatura |
-| **Chunking** | tiktoken (cl100k_base) |
 | **Frontend** | React 19, Vite, Tailwind CSS |
-| **Streaming** | Server-Sent Events (SSE) |
+| **Hosting** | Render (backend) + Vercel (frontend) |
 
 ## Database Schema
 
-SQLite with 7 tables:
+8 tables (same schema across SQLite and Supabase):
 
-- **users** — user profiles
-- **conversations** — chat sessions per user
-- **messages** — message history per conversation (role, content, timestamps)
-- **journal_entries** — journal with title, content, mood, tags, embeddings
-- **tasks** — tasks with title, status, priority, due dates
-- **user_memories** — key-value facts with embeddings for semantic recall
-- **calendar_events** — events with title, start/end times
+| Table | Purpose |
+|-------|---------|
+| `users` | User profiles with email, password hash, auth provider |
+| `conversations` | Chat sessions per user |
+| `messages` | Message history per conversation |
+| `journal_entries` | Journal with title, content, mood, tags, embeddings |
+| `tasks` | Tasks with status, priority, due dates |
+| `user_memories` | Key-value user facts with embeddings |
+| `calendar_events` | Events with start/end times |
+| `verification_codes` | Email verification and password reset codes |
