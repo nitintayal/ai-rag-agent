@@ -15,20 +15,24 @@ from memory.long_term_memory import UserMemory
 logger = logging.getLogger(__name__)
 
 
-def run_agent(question: str, user_id: str, conversation_id: str) -> dict:
-    """Run the agent synchronously. Returns {answer, sources, tool}."""
-    state: AgentState = {
+def _empty_state(question, user_id, conversation_id, stream=False) -> AgentState:
+    return {
         "question": question,
         "user_id": user_id,
         "conversation_id": conversation_id,
         "tool": None,
         "tool_args": None,
+        "tools_plan": None,
         "context": None,
         "sources": None,
         "messages": None,
         "answer": None,
-        "stream": False,
+        "stream": stream,
     }
+
+
+def run_agent(question: str, user_id: str, conversation_id: str) -> dict:
+    state = _empty_state(question, user_id, conversation_id)
     result = agent.invoke(state)
     return {
         "answer": result.get("answer", ""),
@@ -38,29 +42,18 @@ def run_agent(question: str, user_id: str, conversation_id: str) -> dict:
 
 
 async def run_agent_stream(question: str, user_id: str, conversation_id: str) -> AsyncIterator[str]:
-    """Run routing + tool execution synchronously, then stream the LLM answer."""
     from agent.nodes import route, execute_tool
-    from llm.factory import get_llm_client
     from configs.config import settings
 
-    state: AgentState = {
-        "question": question,
-        "user_id": user_id,
-        "conversation_id": conversation_id,
-        "tool": None,
-        "tool_args": None,
-        "context": None,
-        "sources": None,
-        "messages": None,
-        "answer": None,
-        "stream": True,
-    }
+    state = _empty_state(question, user_id, conversation_id, stream=True)
 
-    # Route
+    # Route + extract args (supports multi-tool)
     route_result = route(state)
     state["tool"] = route_result["tool"]
+    state["tool_args"] = route_result.get("tool_args", {})
+    state["tools_plan"] = route_result.get("tools_plan")
 
-    # Execute tool
+    # Execute tool(s)
     tool_result = execute_tool(state)
     state["context"] = tool_result.get("context", "")
     state["sources"] = tool_result.get("sources", [])
@@ -96,17 +89,14 @@ async def run_agent_stream(question: str, user_id: str, conversation_id: str) ->
         full_answer.append(token)
         yield token
 
-    # After streaming, save to memory
     answer_text = "".join(full_answer)
     conv_memory.add_user_message(question)
     conv_memory.add_assistant_message(answer_text)
 
-    # Yield sources at the end
     sources = state.get("sources", [])
     if sources:
         yield "\n\nSOURCES:" + json.dumps(sources)
 
-    # Extract memory in background (non-blocking)
     if getattr(settings, "MEMORY_EXTRACTION_ENABLED", False):
         try:
             user_memory.extract_and_store(question, answer_text, llm)

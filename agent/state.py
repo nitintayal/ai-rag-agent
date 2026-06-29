@@ -7,6 +7,7 @@ class AgentState(TypedDict):
     conversation_id: str
     tool: Optional[str]
     tool_args: Optional[dict]
+    tools_plan: Optional[list]  # [{tool, args}, ...] for multi-tool
     context: Optional[str]
     sources: Optional[list[str]]
     messages: Optional[list[dict]]

@@ -18,6 +18,13 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
     conversation_id = req.conversation_id or str(uuid4())
     user_id = user["id"]
 
+    # Auto-title new conversations from the first message
+    from storage.repositories import conversation_repo
+    conv = conversation_repo.get_conversation(conversation_id)
+    if not conv:
+        title = req.question[:80] + ("..." if len(req.question) > 80 else "")
+        conversation_repo.create_conversation(user_id, title=title, conversation_id=conversation_id)
+
     async def event_stream():
         try:
             async for token in run_agent_stream(req.question, user_id, conversation_id):

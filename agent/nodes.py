@@ -5,7 +5,7 @@ import logging
 
 from agent.state import AgentState
 from llm.factory import get_llm_client
-from llm.prompts import ROUTER_PROMPT, ANSWER_PROMPT, WEB_ANSWER_PROMPT, TOOL_ARGS_PROMPT, TOOL_SCHEMAS
+from llm.prompts import ROUTER_PROMPT, ANSWER_PROMPT, WEB_ANSWER_PROMPT
 from memory.context_builder import build_messages
 from memory.conversation_memory import ConversationMemory
 from memory.long_term_memory import UserMemory
@@ -14,31 +14,32 @@ from tools.registry import get_tool
 logger = logging.getLogger(__name__)
 
 _KEYWORD_WEB_TRIGGERS = {"latest", "current", "today", "news", "weather", "stock", "price", "now", "recent"}
+_VALID_TOOLS = {"rag", "web", "journal", "task", "memory", "calendar", "direct"}
 
 
 def _get_llm():
     return get_llm_client()
 
 
-def _keyword_fallback_route(question: str) -> str:
+def _keyword_fallback_route(question: str) -> list[dict]:
     q = question.lower()
     if any(w in q for w in _KEYWORD_WEB_TRIGGERS):
-        return "web"
+        return [{"tool": "web", "args": {"query": question}}]
     if any(w in q for w in ("journal", "diary", "note", "reflect")):
-        return "journal"
+        return [{"tool": "journal", "args": {"action": "search", "query": question}}]
     if any(w in q for w in ("task", "todo", "remind", "deadline")):
-        return "task"
+        return [{"tool": "task", "args": {"action": "list"}}]
     if any(w in q for w in ("remember", "preference", "my name", "i am", "i like", "i prefer")):
-        return "memory"
+        return [{"tool": "memory", "args": {"action": "store"}}]
     if any(w in q for w in ("calendar", "event", "meeting", "schedule", "appointment")):
-        return "calendar"
-    return "direct"
+        return [{"tool": "calendar", "args": {"action": "list"}}]
+    return [{"tool": "direct", "args": {}}]
 
 
 # ── Node: route ──────────────────────────────────────────────────
 
 def route(state: AgentState) -> dict:
-    """Decide which tool to use. Tries LLM routing, falls back to keywords."""
+    """Single LLM call: decide which tool(s) AND extract arguments."""
     question = state["question"]
     llm = _get_llm()
 
@@ -46,51 +47,73 @@ def route(state: AgentState) -> dict:
         prompt = ROUTER_PROMPT.format(question=question)
         result = llm.chat(
             [{"role": "user", "content": prompt}],
-            system="You are a router. Respond only with valid JSON.",
+            system="You are a router that picks the right tool(s) and extracts parameters. Respond only with valid JSON.",
             format="json",
         )
         parsed = json.loads(result)
-        tool = parsed.get("tool", "direct")
-        if tool in ("rag", "web", "journal", "task", "memory", "calendar", "direct"):
-            logger.info(f"LLM routed to: {tool} (reason: {parsed.get('reason', '')})")
-            return {"tool": tool}
+
+        # Handle new multi-tool format: {"tools": [...]}
+        tools_list = parsed.get("tools", [])
+        if not tools_list:
+            # Fallback to old single-tool format: {"tool": "...", "args": {...}}
+            tool = parsed.get("tool", "direct")
+            args = parsed.get("args", {})
+            if tool in _VALID_TOOLS:
+                tools_list = [{"tool": tool, "args": args}]
+
+        # Validate
+        valid = [t for t in tools_list if t.get("tool") in _VALID_TOOLS]
+        if valid:
+            logger.info(f"LLM routed to: {[t['tool'] for t in valid]}")
+            first = valid[0]
+            return {
+                "tool": first["tool"],
+                "tool_args": first.get("args", {}),
+                "tools_plan": valid if len(valid) > 1 else None,
+            }
     except Exception as e:
         logger.debug(f"LLM routing failed, using keyword fallback: {e}")
 
-    tool = _keyword_fallback_route(question)
-    logger.info(f"Keyword routed to: {tool}")
-    return {"tool": tool}
-
-
-# Tools that need LLM argument extraction (structured tools)
-_STRUCTURED_TOOLS = {"task", "journal", "memory", "calendar"}
-
-
-def _extract_tool_args(tool_name: str, question: str, llm) -> dict:
-    """Use the LLM to extract structured arguments for a tool from the user's question."""
-    schema = TOOL_SCHEMAS.get(tool_name, "")
-    if not schema:
-        return {}
-
-    prompt = TOOL_ARGS_PROMPT.format(tool=tool_name, question=question, tool_schema=schema)
-    try:
-        result = llm.chat(
-            [{"role": "user", "content": prompt}],
-            system="You extract tool parameters from user messages. Respond only with valid JSON.",
-            format="json",
-        )
-        args = json.loads(result)
-        logger.info(f"Extracted {tool_name} args: {args}")
-        return args
-    except Exception as e:
-        logger.debug(f"Tool arg extraction failed for {tool_name}: {e}")
-        return {}
+    fallback = _keyword_fallback_route(question)
+    logger.info(f"Keyword routed to: {fallback[0]['tool']}")
+    return {
+        "tool": fallback[0]["tool"],
+        "tool_args": fallback[0].get("args", {}),
+        "tools_plan": None,
+    }
 
 
 # ── Node: execute_tool ───────────────────────────────────────────
 
 def execute_tool(state: AgentState) -> dict:
-    """Execute the selected tool."""
+    """Execute one or more tools and combine context."""
+    tools_plan = state.get("tools_plan")
+
+    # Multi-tool: execute all and merge context
+    if tools_plan and len(tools_plan) > 1:
+        all_context = []
+        all_sources = []
+        for plan in tools_plan:
+            tool_name = plan["tool"]
+            if tool_name == "direct":
+                continue
+            tool = get_tool(tool_name)
+            if not tool:
+                continue
+            result = tool.execute(
+                user_id=state["user_id"],
+                query=state["question"],
+                **plan.get("args", {}),
+            )
+            if result.ok and result.context:
+                all_context.append(f"[{tool_name.upper()} results]\n{result.context}")
+                all_sources.extend(result.sources or [])
+            elif result.error:
+                logger.error(f"Tool {tool_name} error: {result.error}")
+
+        return {"context": "\n\n".join(all_context), "sources": all_sources}
+
+    # Single tool
     tool_name = state.get("tool", "direct")
     if tool_name == "direct":
         return {"context": "", "sources": []}
@@ -100,16 +123,10 @@ def execute_tool(state: AgentState) -> dict:
         logger.warning(f"Unknown tool: {tool_name}")
         return {"context": "", "sources": []}
 
-    # For structured tools, extract arguments via LLM
-    extra_args = state.get("tool_args") or {}
-    if tool_name in _STRUCTURED_TOOLS and not extra_args:
-        llm = _get_llm()
-        extra_args = _extract_tool_args(tool_name, state["question"], llm)
-
     result = tool.execute(
         user_id=state["user_id"],
         query=state["question"],
-        **extra_args,
+        **(state.get("tool_args") or {}),
     )
 
     if result.error:
@@ -122,7 +139,6 @@ def execute_tool(state: AgentState) -> dict:
 # ── Node: generate ───────────────────────────────────────────────
 
 def generate(state: AgentState) -> dict:
-    """Generate the final answer using context + conversation history."""
     question = state["question"]
     context = state.get("context", "")
     tool = state.get("tool", "direct")
@@ -131,14 +147,12 @@ def generate(state: AgentState) -> dict:
 
     llm = _get_llm()
 
-    # Load conversation memory
     conv_memory = ConversationMemory(conversation_id, user_id)
     user_memory = UserMemory(user_id)
 
     history = conv_memory.get_history()
     profile_context = user_memory.get_profile_context()
 
-    # Build the prompt based on tool type
     if tool == "web" and context:
         answer_prompt = WEB_ANSWER_PROMPT.format(context=context, question=question)
     elif context:
@@ -154,7 +168,6 @@ def generate(state: AgentState) -> dict:
 
     answer = llm.chat(messages, system=None)
 
-    # Save to conversation history
     conv_memory.add_user_message(question)
     conv_memory.add_assistant_message(answer)
 
@@ -164,10 +177,9 @@ def generate(state: AgentState) -> dict:
     }
 
 
-# ── Node: extract_memory (optional, post-response) ──────────────
+# ── Node: extract_memory ────────────────────────────────────────
 
 def extract_memory(state: AgentState) -> dict:
-    """Extract and store memorable facts from the conversation turn."""
     from configs.config import settings
     if not getattr(settings, "MEMORY_EXTRACTION_ENABLED", False):
         return {}
