@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS users (
     password    TEXT,
     avatar_url  TEXT,
     auth_provider TEXT NOT NULL DEFAULT 'local',
+    email_verified INTEGER NOT NULL DEFAULT 0,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -107,6 +108,18 @@ CREATE TABLE IF NOT EXISTS user_memories (
 );
 CREATE INDEX IF NOT EXISTS idx_memories_user
     ON user_memories(user_id);
+
+CREATE TABLE IF NOT EXISTS verification_codes (
+    id          TEXT PRIMARY KEY,
+    email       TEXT NOT NULL,
+    code        TEXT NOT NULL,
+    purpose     TEXT NOT NULL CHECK(purpose IN ('email_verify', 'password_reset')),
+    expires_at  TEXT NOT NULL,
+    used        INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_verification_email
+    ON verification_codes(email, purpose, used);
 
 CREATE TABLE IF NOT EXISTS calendar_events (
     id          TEXT PRIMARY KEY,

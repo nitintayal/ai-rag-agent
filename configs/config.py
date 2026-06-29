@@ -82,7 +82,10 @@ class Settings(BaseSettings):
     # =========================
     JWT_SECRET: str = "change-me-in-production"  # MUST override via env var in production
     GOOGLE_OAUTH_CLIENT_ID: Optional[str] = None
-    CORS_ORIGINS: str = "*"  # comma-separated, e.g. "https://ai-rag-ui.vercel.app,http://localhost:5173"
+    CORS_ORIGINS: str = "*"  # comma-separated
+    RESEND_API_KEY: Optional[str] = None
+    RESEND_FROM_EMAIL: str = "ai-personal-agent@resend.dev"
+    FRONTEND_URL: str = "http://localhost:5173"
 
     # =========================
     # Debug
