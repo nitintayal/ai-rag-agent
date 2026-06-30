@@ -25,15 +25,18 @@ def _extract_text_from_html(html: str) -> str:
 
 def _fetch_page(url: str) -> str:
     try:
-        with httpx.Client(timeout=10.0, follow_redirects=True) as client:
+        with httpx.Client(timeout=6.0, follow_redirects=True) as client:
             resp = client.get(url, headers={
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
             })
             resp.raise_for_status()
     except Exception:
         return ""
-    text = trafilatura.extract(resp.text) or _extract_text_from_html(resp.text)
-    return text[:4000]
+    try:
+        text = trafilatura.extract(resp.text) or _extract_text_from_html(resp.text)
+    except Exception:
+        text = _extract_text_from_html(resp.text)
+    return (text or "")[:4000]
 
 
 def web_search(query: str) -> dict:

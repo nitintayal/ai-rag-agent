@@ -1,5 +1,6 @@
 """Entry point for running the agent — sync and streaming variants."""
 
+import asyncio
 import json
 import logging
 from typing import AsyncIterator
@@ -47,14 +48,20 @@ async def run_agent_stream(question: str, user_id: str, conversation_id: str) ->
 
     state = _empty_state(question, user_id, conversation_id, stream=True)
 
-    # Route + extract args (supports multi-tool)
-    route_result = route(state)
+    # Send an immediate heartbeat so the HTTP connection opens right away —
+    # otherwise route()/execute_tool() can block for 10-30s (e.g. slow web
+    # search) with zero bytes sent, causing proxies/browsers to drop the
+    # connection before any response arrives.
+    yield ""
+
+    # Route + extract args (supports multi-tool) — run off the event loop
+    route_result = await asyncio.to_thread(route, state)
     state["tool"] = route_result["tool"]
     state["tool_args"] = route_result.get("tool_args", {})
     state["tools_plan"] = route_result.get("tools_plan")
 
-    # Execute tool(s)
-    tool_result = execute_tool(state)
+    # Execute tool(s) — also off the event loop, can involve slow network calls
+    tool_result = await asyncio.to_thread(execute_tool, state)
     state["context"] = tool_result.get("context", "")
     state["sources"] = tool_result.get("sources", [])
 
