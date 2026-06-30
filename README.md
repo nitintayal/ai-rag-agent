@@ -210,7 +210,8 @@ ai-rag-agent/
 │   └── ARCHITECTURE.md               #   Deep technical reference
 │
 ├── configs/config.py                 #   Pydantic BaseSettings
-├── render.yaml                       #   Render blueprint (start command: uvicorn api.app:app)
+├── start.py                          #   Cloud entry point (Render's configured start command)
+├── render.yaml                       #   Render blueprint reference
 ├── .env.example                      #   Config template
 ├── requirements.txt                  #   Full dependencies (local)
 └── requirements-cloud.txt            #   Cloud dependencies (no torch)
@@ -245,9 +246,9 @@ python -m api.app
 
 **Backend (Render):**
 1. Push to GitHub
-2. Create Render Web Service → connect repo, or use the included `render.yaml` blueprint
+2. Create Render Web Service → connect repo
 3. Build: `pip install -r requirements-cloud.txt`
-4. Start: `uvicorn api.app:app --host 0.0.0.0 --port $PORT`
+4. Start: `python start.py`
 5. Set env vars: `LLM_PROVIDER=gemini` (or `openrouter`), `GOOGLE_API_KEY` (or `OPENROUTER_API_KEY`), `DB_BACKEND=supabase`, `SUPABASE_URL`, `SUPABASE_KEY`, `JWT_SECRET`, `CORS_ORIGINS`
 
 **Frontend (Vercel):**

@@ -10,8 +10,10 @@ An AI personal assistant with chat, RAG, web search, tasks, journal, memory, and
 
 ```bash
 source venv/bin/activate
-uvicorn api.app:app --reload   # starts on port 8000 (matches render.yaml's start command)
+uvicorn api.app:app --reload   # local dev, starts on port 8000
 ```
+
+In production (Render), the configured start command is `python start.py` — a thin wrapper around `uvicorn api.app:app` with extra startup logging for debugging cold-start failures. Don't delete it; `render.yaml`'s start command is reference-only and isn't what the live dashboard service actually runs.
 
 Frontend: `cd ../ai-rag-ui && npm run dev`
 

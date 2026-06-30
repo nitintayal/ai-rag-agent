@@ -3,7 +3,7 @@ services:
     name: ai-personal-assistant
     runtime: python
     buildCommand: pip install -r requirements-cloud.txt
-    startCommand: uvicorn api.app:app --host 0.0.0.0 --port $PORT
+    startCommand: python start.py
     envVars:
       - key: LLM_PROVIDER
         value: gemini
