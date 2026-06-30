@@ -14,7 +14,7 @@ User (browser/mobile)
   └── FastAPI Backend (Render)
         ├── Auth Layer (JWT + Google OAuth + Resend)
         ├── Agent Layer (LangGraph)
-        ├── LLM Layer (Gemini / Ollama)
+        ├── LLM Layer (Gemini / OpenRouter / Ollama, per-user selectable)
         ├── Tool Layer (6 tools)
         ├── Memory Layer (conversation + long-term)
         └── Storage Layer (SQLite / Supabase)
@@ -35,7 +35,7 @@ User (browser/mobile)
 
 3. agent/runner.py → run_agent_stream()
    ├── ROUTE: Single LLM call → {"tools": [{tool, args}]}
-   │   ├── LLM routing prompt includes all 7 tool options
+   │   ├── LLM routing prompt includes all 6 tool options
    │   └── Keyword fallback if LLM fails
    │
    ├── EXECUTE: Runs selected tool(s)
@@ -143,23 +143,36 @@ def create_backend():
 ## LLM Layer: Provider Abstraction
 
 ```
-llm/factory.py → get_llm_client()
+llm/factory.py → get_llm_client(provider=None, model=None)
+       │         get_llm_client_for_user(user)  ← resolves user["llm_provider"/"llm_model"] first
        │
-       ├── LLM_PROVIDER=gemini → GeminiClient
+       ├── provider=gemini → GeminiClient
        │   ├── google-genai SDK
        │   ├── Retry: 2 attempts per model
        │   ├── Fallback chain: 2.5-flash → 2.0-flash → 2.0-flash-lite
        │   └── Handles 503/429 gracefully
        │
-       └── LLM_PROVIDER=ollama → OllamaClient
+       ├── provider=openrouter → OpenRouterClient
+       │   ├── OpenAI-compatible REST API (httpx)
+       │   ├── Retry: 2 attempts per model on 429
+       │   ├── Fallback chain across multiple free `:free` models
+       │   └── 404 (deprecated/renamed model) skips straight to next model, no wasted retry
+       │
+       └── provider=ollama → OllamaClient
            ├── httpx → localhost:11434/api/chat
            ├── Real token streaming via chunked response
            └── Model management (pull, list, check)
 
-Both implement the same interface:
+All three implement the same interface:
   .chat(messages, model, system, format) → str
   .chat_stream(messages, ...) → AsyncIterator[str]
   .generate(prompt, ...) → str
+  .chat_full_async(messages, ...) → str
+
+Per-user overrides: PATCH /auth/llm-settings sets users.llm_provider / users.llm_model.
+agent/state.py::AgentState carries llm_provider/llm_model through every node that calls
+the LLM (route, generate, extract_memory) via agent/nodes.py::_get_llm(state).
+If the user's chosen provider has no API key configured, falls back to the global default.
 ```
 
 ---
@@ -285,14 +298,14 @@ Auth Flow:
 │   Vercel     │────▶│   Render     │────▶│  Supabase    │
 │  (Frontend)  │     │  (Backend)   │     │  (Database)  │
 │  React SPA   │     │  FastAPI     │     │  Postgres    │
-│  CDN/Edge    │     │  Python 3.14 │     │  REST API    │
+│  CDN/Edge    │     │  Python 3.12 │     │  REST API    │
 └─────────────┘     │              │     └──────────────┘
                     │         ┌────┘
                     │         ▼
-                    │  ┌──────────────┐
-                    │  │  Gemini API  │
-                    │  │  (LLM)       │
-                    │  └──────────────┘
+                    │  ┌──────────────────────┐
+                    │  │  Gemini / OpenRouter  │
+                    │  │  (LLM, per-user pick) │
+                    │  └──────────────────────┘
                     └──────────────────
 
 Free tier limits:
@@ -300,6 +313,7 @@ Free tier limits:
   Render: 750 hrs/month, sleeps after 15min idle
   Supabase: 500MB, 2 projects
   Gemini: 500 req/day (2.5-flash), 1500/day (2.0-flash)
+  OpenRouter: Per-model daily limits on :free models, varies — fallback chain mitigates this
 ```
 
 ---

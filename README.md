@@ -9,7 +9,7 @@ A full-stack AI personal assistant with chat, RAG document search, web search, j
 - **Chat with real-time streaming** — token-by-token responses via Server-Sent Events (SSE)
 - **Multi-tool per turn** — agent can call multiple tools in one message (e.g. "show my tasks and search journal")
 - **RAG document search** — upload PDFs, TXT, XLSX, CSV and ask questions with hybrid retrieval (FAISS + BM25 + cross-encoder reranking)
-- **Web search** — routes time-sensitive queries to DuckDuckGo with parallel page content extraction
+- **Web search** — routes time-sensitive queries to DuckDuckGo (free) or Tavily (API key) with parallel page content extraction
 - **Task management** — create, complete, filter, and track tasks with priorities and due dates
 - **Journal** — personal journal with CRUD, mood tagging, and semantic search
 - **Persistent memory** — remembers user preferences and facts across conversations
@@ -18,6 +18,7 @@ A full-stack AI personal assistant with chat, RAG document search, web search, j
 - **Intelligent routing** — single LLM call picks the right tool(s) and extracts arguments
 - **Authentication** — JWT-based auth with email/password + Google OAuth
 - **Email verification** — optional via Resend (configurable)
+- **Per-user model selection** — each user can pick their own LLM provider/model in Settings, independent of the server default
 - **Dark mode** — system-aware with manual toggle
 - **Voice input** — browser Speech-to-Text for hands-free input
 - **Mobile PWA** — installable as a native app on iPhone/Android
@@ -44,10 +45,11 @@ A full-stack AI personal assistant with chat, RAG document search, web search, j
     ┌────▼────┐  ┌────▼────┐  ┌───▼─────┐
     │  LLM    │  │  Tools  │  │  Memory │
     │ Gemini/ │  │  (6)    │  │         │
-    │ Ollama  │  └────┬────┘  └───┬─────┘
+    │OpenRouter│  └────┬────┘  └───┬─────┘
+    │ /Ollama │        │           │
     └─────────┘       │           │
                ┌──────▼──────┐ ┌──▼────────┐
-               │  Retrieval  │ │  Storage   │
+               │  RAG layer  │ │  Storage   │
                │ FAISS+BM25  │ │ SQLite/    │
                └─────────────┘ │ Supabase   │
                                └────────────┘
@@ -57,8 +59,8 @@ A full-stack AI personal assistant with chat, RAG document search, web search, j
 
 ```
 API Layer  →  Auth Layer
-           →  Agent Layer  →  LLM Layer (Gemini / Ollama)
-                            →  Tool Layer  →  Retrieval Layer
+           →  Agent Layer  →  LLM Layer (Gemini / OpenRouter / Ollama, per-user override)
+                            →  Tool Layer  →  RAG Layer
                                            →  Storage Layer (plug-and-play)
                             →  Memory Layer →  Storage Layer
 ```
@@ -66,12 +68,12 @@ API Layer  →  Auth Layer
 | Layer | Purpose | Key Files |
 |-------|---------|-----------|
 | **API** | FastAPI endpoints, SSE streaming, request schemas | `api/app.py`, `api/routes/` |
-| **Auth** | JWT tokens, password hashing, Google OAuth, email verification | `auth/`, `api/routes/auth.py` |
+| **Auth** | JWT tokens, password hashing, Google OAuth, email verification | `auth/`, `api/routes/auth.py`, `api/routes/profile.py` |
 | **Agent** | LangGraph graph, multi-tool orchestration, sync + streaming | `agent/graph.py`, `agent/nodes.py`, `agent/runner.py` |
-| **LLM** | Gemini + Ollama clients, prompt templates, model management | `llm/factory.py`, `llm/gemini_client.py`, `llm/ollama_client.py` |
+| **LLM** | Gemini / OpenRouter / Ollama clients with retry + fallback, per-user overrides | `llm/factory.py`, `llm/gemini_client.py`, `llm/openrouter_client.py`, `llm/ollama_client.py` |
 | **Tools** | 6 tools with uniform `BaseTool` interface and registry | `tools/base.py`, `tools/registry.py`, `tools/*.py` |
 | **Memory** | Conversation history + long-term user facts + context builder | `memory/` |
-| **Retrieval** | FAISS + BM25 hybrid search, cross-encoder reranking, ingestion | `rag/` |
+| **RAG** | FAISS + BM25 hybrid search, cross-encoder reranking, ingestion | `rag/` |
 | **Storage** | Plug-and-play database with abstract base + SQLite/Supabase backends | `storage/factory.py`, `storage/backends/` |
 
 ### Tools
@@ -79,7 +81,7 @@ API Layer  →  Auth Layer
 | Tool | Description |
 |------|-------------|
 | `rag` | Hybrid search over uploaded documents with reranking |
-| `web` | DuckDuckGo search with parallel page content extraction |
+| `web` | Web search via DuckDuckGo or Tavily, with parallel page content extraction |
 | `journal` | Journal entries with semantic search |
 | `task` | Task/reminder management with status, priority, due dates |
 | `memory` | Store and recall user preferences and facts |
@@ -104,14 +106,22 @@ Zero changes to API routes, agent, memory, tools, or frontend.
 
 ### LLM Provider
 
-Switch between local and cloud LLMs:
+Switch between local and cloud LLMs via a global default, or let each user pick their own in Settings:
 
 ```
-LLM_PROVIDER=gemini   # Google Gemini API (cloud, free tier)
-LLM_PROVIDER=ollama   # Local Ollama (requires 8GB+ RAM)
+LLM_PROVIDER=gemini       # Google Gemini API (cloud, free tier)
+LLM_PROVIDER=openrouter   # OpenRouter — access to multiple free models via one key
+LLM_PROVIDER=ollama       # Local Ollama (requires 8GB+ RAM)
 ```
 
-Gemini client includes retry + fallback across models (2.5-flash → 2.0-flash → 2.0-flash-lite).
+Both Gemini and OpenRouter clients include retry + automatic fallback across multiple models if the primary one is rate-limited or unavailable (Gemini: 2.5-flash → 2.0-flash → 2.0-flash-lite; OpenRouter: rotates across several free `:free` models). Per-user overrides are stored on the `users` table (`llm_provider`, `llm_model`) and set via `PATCH /auth/llm-settings` — the agent resolves the user's choice first, falling back to the global default if their provider isn't configured.
+
+### Web Search Provider
+
+```
+WEB_SEARCH_PROVIDER=ddgs     # DuckDuckGo via scraping (free, no key needed)
+WEB_SEARCH_PROVIDER=tavily   # Tavily API (faster, cleaner results, requires TAVILY_API_KEY)
+```
 
 ## Project Structure
 
@@ -122,19 +132,22 @@ ai-rag-agent/
 │   ├── dependencies.py               #   Auth dependency (get_current_user)
 │   ├── routes/
 │   │   ├── auth.py                   #   Register, login, Google OAuth, forgot/reset password
+│   │   ├── profile.py                #   /me, profile update, LLM settings, change password
 │   │   ├── chat.py                   #   POST /chat (SSE streaming)
 │   │   ├── conversations.py          #   Chat history CRUD
 │   │   ├── documents.py              #   File upload/delete
 │   │   ├── journal.py                #   Journal CRUD + search
 │   │   ├── tasks.py                  #   Task CRUD
 │   │   └── health.py                 #   Health + status
-│   └── schemas/                      #   Pydantic models
+│   └── schemas/                      #   Pydantic models (auth.py, chat.py, tasks.py)
 │
 ├── auth/                             # Auth Layer
 │   ├── passwords.py                  #   bcrypt hashing
 │   ├── jwt_utils.py                  #   JWT create/decode
 │   ├── google_oauth.py               #   Google ID token verification
-│   └── email.py                      #   Resend email integration
+│   ├── email.py                      #   Resend email integration
+│   ├── rate_limit.py                 #   Shared IP rate limiter
+│   └── verification.py               #   Verification code generation/validation
 │
 ├── agent/                            # Agent Layer
 │   ├── graph.py                      #   LangGraph StateGraph
@@ -143,8 +156,9 @@ ai-rag-agent/
 │   └── runner.py                     #   Sync + streaming entry points
 │
 ├── llm/                              # LLM Layer
-│   ├── factory.py                    #   Returns Gemini or Ollama client based on config
+│   ├── factory.py                    #   Returns Gemini/OpenRouter/Ollama client; per-user override
 │   ├── gemini_client.py              #   Gemini API with retry + model fallback
+│   ├── openrouter_client.py          #   OpenRouter API with retry + free-model fallback chain
 │   ├── ollama_client.py              #   Ollama REST client (sync + async + streaming)
 │   ├── prompts.py                    #   All prompt templates
 │   └── model_manager.py              #   Ollama model availability checks
@@ -153,7 +167,10 @@ ai-rag-agent/
 │   ├── base.py                       #   BaseTool ABC, ToolResult, ToolDefinition
 │   ├── registry.py                   #   Tool registry
 │   ├── rag_tool.py                   #   RAG hybrid search
-│   ├── web_tool.py                   #   Web search (DuckDuckGo + trafilatura)
+│   ├── web_tool.py                   #   Web search dispatcher (ddgs/tavily)
+│   ├── web_search/
+│   │   ├── ddgs_search.py            #   DuckDuckGo scraping + trafilatura extraction
+│   │   └── tavily_search.py          #   Tavily API search
 │   ├── journal_tool.py               #   Journal CRUD + search
 │   ├── task_tool.py                  #   Task management
 │   ├── memory_tool.py                #   User memory store/recall
@@ -172,24 +189,14 @@ ai-rag-agent/
 │   │   ├── conversation_repo.py
 │   │   ├── journal_repo.py
 │   │   ├── task_repo.py
-│   │   └── memory_repo.py
+│   │   ├── memory_repo.py
+│   │   ├── calendar_repo.py
+│   │   └── verification_repo.py
 │   └── backends/
 │       ├── base.py                   #   Abstract base classes for all repos
-│       ├── embedding_utils.py        #   Safe embedding helper (ML-optional)
-│       ├── sqlite/                   #   SQLite implementation
-│       │   ├── user_repo.py
-│       │   ├── conversation_repo.py
-│       │   ├── journal_repo.py
-│       │   ├── task_repo.py
-│       │   └── memory_repo.py
-│       └── supabase/                 #   Supabase implementation
-│           ├── client.py             #   Supabase client singleton
-│           ├── schema.sql            #   Table creation SQL
-│           ├── user_repo.py
-│           ├── conversation_repo.py
-│           ├── journal_repo.py
-│           ├── task_repo.py
-│           └── memory_repo.py
+│       ├── embedding_utils.py        #   Safe embedding + shared search-text helper (ML-optional)
+│       ├── sqlite/                   #   SQLite implementation (7 repo modules)
+│       └── supabase/                 #   Supabase implementation (7 repo modules + client.py + schema.sql)
 │
 ├── rag/                               # Retrieval Layer (consolidated)
 │   ├── vector_store.py               #   FAISS + BM25 hybrid search
@@ -234,14 +241,14 @@ ollama pull qwen2.5:7b
 python -m api.app
 ```
 
-### Option 2: Cloud Deployment (Gemini + Supabase)
+### Option 2: Cloud Deployment (Gemini/OpenRouter + Supabase)
 
 **Backend (Render):**
 1. Push to GitHub
-2. Create Render Web Service → connect repo
+2. Create Render Web Service → connect repo, or use the included `render.yaml` blueprint
 3. Build: `pip install -r requirements-cloud.txt`
-4. Start: `PYTHONPATH=/opt/render/project/src python start.py`
-5. Set env vars: `LLM_PROVIDER=gemini`, `GOOGLE_API_KEY`, `DB_BACKEND=supabase`, `SUPABASE_URL`, `SUPABASE_KEY`, `JWT_SECRET`
+4. Start: `uvicorn api.app:app --host 0.0.0.0 --port $PORT`
+5. Set env vars: `LLM_PROVIDER=gemini` (or `openrouter`), `GOOGLE_API_KEY` (or `OPENROUTER_API_KEY`), `DB_BACKEND=supabase`, `SUPABASE_URL`, `SUPABASE_KEY`, `JWT_SECRET`, `CORS_ORIGINS`
 
 **Frontend (Vercel):**
 1. Push `ai-rag-ui` to GitHub
@@ -266,9 +273,11 @@ npm run dev
 | Variable | Default | Description |
 |----------|---------|-------------|
 | **LLM** | | |
-| `LLM_PROVIDER` | `ollama` | `ollama` or `gemini` |
+| `LLM_PROVIDER` | `ollama` | `ollama`, `gemini`, or `openrouter` — global default (users can override in Settings) |
 | `GOOGLE_API_KEY` | — | Gemini API key (when provider=gemini) |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model name |
+| `OPENROUTER_API_KEY` | — | OpenRouter API key (when provider=openrouter) |
+| `OPENROUTER_MODEL` | `meta-llama/llama-3.3-70b-instruct:free` | OpenRouter model name |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `OLLAMA_CHAT_MODEL` | `qwen2.5:7b` | Ollama model name |
 | **Database** | | |
@@ -284,6 +293,10 @@ npm run dev
 | `RESEND_API_KEY` | — | Resend.com API key for emails |
 | `RESEND_FROM_EMAIL` | `onboarding@resend.dev` | Sender email |
 | `FRONTEND_URL` | `http://localhost:5173` | For email verification links |
+| **Web Search** | | |
+| `WEB_SEARCH_PROVIDER` | `ddgs` | `ddgs` (free) or `tavily` (API key, faster) |
+| `TAVILY_API_KEY` | — | Tavily API key (when provider=tavily) |
+| `WEB_SEARCH_MAX_RESULTS` | `3` | Results per query |
 | **Retrieval** | | |
 | `VECTOR_WEIGHT` | `0.7` | Vector search weight in hybrid |
 | `BM25_WEIGHT` | `0.3` | BM25 weight in hybrid |
@@ -294,7 +307,6 @@ npm run dev
 | **Other** | | |
 | `CONVERSATION_HISTORY_LIMIT` | `20` | Messages per conversation turn |
 | `MEMORY_EXTRACTION_ENABLED` | `true` | Auto-extract user facts |
-| `WEB_SEARCH_MAX_RESULTS` | `3` | DuckDuckGo results per query |
 | `API_PORT` | `8000` | Server port |
 | `DEBUG` | `false` | Enable auto-reload |
 
@@ -306,12 +318,14 @@ npm run dev
 | POST | `/auth/register` | Register with email/password |
 | POST | `/auth/login` | Login |
 | POST | `/auth/google` | Google OAuth login |
-| GET | `/auth/me` | Get current user |
-| PATCH | `/auth/profile` | Update display name |
-| POST | `/auth/change-password` | Change password |
 | POST | `/auth/forgot-password` | Send reset email |
 | POST | `/auth/reset-password` | Reset with code |
 | POST | `/auth/verify-email` | Verify email with code |
+| GET | `/auth/me` | Get current user |
+| PATCH | `/auth/profile` | Update display name |
+| POST | `/auth/change-password` | Change password |
+| PATCH | `/auth/llm-settings` | Set per-user LLM provider/model preference |
+| GET | `/auth/llm-settings/available` | List available models per provider |
 
 ### Chat
 | Method | Endpoint | Description |
@@ -352,13 +366,13 @@ npm run dev
 | Component | Technology |
 |-----------|-----------|
 | **Backend** | Python, FastAPI, LangGraph |
-| **LLM** | Google Gemini (cloud) / Ollama (local) |
+| **LLM** | Google Gemini / OpenRouter (cloud, free tiers) / Ollama (local) — per-user selectable |
 | **Database** | Supabase (cloud) / SQLite (local) |
 | **Auth** | JWT + bcrypt + Google OAuth |
 | **Email** | Resend |
 | **Vector search** | FAISS + rank-bm25 + CrossEncoder |
 | **Embeddings** | sentence-transformers (all-MiniLM-L6-v2) |
-| **Web search** | DuckDuckGo (ddgs) + trafilatura |
+| **Web search** | DuckDuckGo (ddgs) + trafilatura, or Tavily API |
 | **Frontend** | React 19, Vite, Tailwind CSS |
 | **Hosting** | Render (backend) + Vercel (frontend) |
 
