@@ -56,7 +56,9 @@ class Settings(BaseSettings):
     # =========================
     # Web Search
     # =========================
+    WEB_SEARCH_PROVIDER: str = "ddgs"  # "ddgs" (free, scraping) or "tavily" (API, needs key)
     WEB_SEARCH_MAX_RESULTS: int = 3
+    TAVILY_API_KEY: Optional[str] = None
 
     # =========================
     # API
