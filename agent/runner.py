@@ -54,16 +54,28 @@ async def run_agent_stream(question: str, user_id: str, conversation_id: str) ->
     # connection before any response arrives.
     yield ""
 
-    # Route + extract args (supports multi-tool) — run off the event loop
-    route_result = await asyncio.to_thread(route, state)
-    state["tool"] = route_result["tool"]
-    state["tool_args"] = route_result.get("tool_args", {})
-    state["tools_plan"] = route_result.get("tools_plan")
+    # Route + extract args (supports multi-tool) — run off the event loop, bounded
+    try:
+        route_result = await asyncio.wait_for(asyncio.to_thread(route, state), timeout=15)
+        state["tool"] = route_result["tool"]
+        state["tool_args"] = route_result.get("tool_args", {})
+        state["tools_plan"] = route_result.get("tools_plan")
+    except asyncio.TimeoutError:
+        logger.warning("Routing timed out, answering directly")
+        state["tool"] = "direct"
+        state["tool_args"] = {}
+        state["tools_plan"] = None
 
-    # Execute tool(s) — also off the event loop, can involve slow network calls
-    tool_result = await asyncio.to_thread(execute_tool, state)
-    state["context"] = tool_result.get("context", "")
-    state["sources"] = tool_result.get("sources", [])
+    # Execute tool(s) — also off the event loop, bounded so a slow tool
+    # (e.g. web search) can never hang the whole request indefinitely
+    try:
+        tool_result = await asyncio.wait_for(asyncio.to_thread(execute_tool, state), timeout=20)
+        state["context"] = tool_result.get("context", "")
+        state["sources"] = tool_result.get("sources", [])
+    except asyncio.TimeoutError:
+        logger.warning(f"Tool '{state.get('tool')}' execution timed out")
+        state["context"] = ""
+        state["sources"] = []
 
     # Build messages for streaming
     conv_memory = ConversationMemory(conversation_id, user_id)

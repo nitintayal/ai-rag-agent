@@ -1,7 +1,7 @@
 """Web search tool: searches the web via DuckDuckGo with page content extraction."""
 
 import re
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from html import unescape
 
 import httpx
@@ -10,6 +10,10 @@ from ddgs import DDGS
 
 from tools.base import BaseTool, ToolDefinition, ToolResult
 from configs.config import settings
+
+_SEARCH_TIMEOUT = 8.0   # ddgs text search — single backend only
+_PAGE_FETCH_TIMEOUT = 5.0
+_OVERALL_TIMEOUT = 15.0  # hard ceiling for the entire web_search() call
 
 
 def _extract_text_from_html(html: str) -> str:
@@ -25,7 +29,7 @@ def _extract_text_from_html(html: str) -> str:
 
 def _fetch_page(url: str) -> str:
     try:
-        with httpx.Client(timeout=6.0, follow_redirects=True) as client:
+        with httpx.Client(timeout=_PAGE_FETCH_TIMEOUT, follow_redirects=True) as client:
             resp = client.get(url, headers={
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
             })
@@ -39,18 +43,50 @@ def _fetch_page(url: str) -> str:
     return (text or "")[:4000]
 
 
-def web_search(query: str) -> dict:
+def _do_search(query: str) -> list[dict]:
+    # Restrict to a single reliable backend — letting ddgs auto-fallback across
+    # 6+ engines (Wikipedia, Mojeek, Yandex, Google, Startpage...) can take
+    # 30+ seconds and trigger CAPTCHAs.
     try:
-        results = list(DDGS().text(query, max_results=settings.WEB_SEARCH_MAX_RESULTS))
+        return list(DDGS().text(
+            query,
+            max_results=settings.WEB_SEARCH_MAX_RESULTS,
+            backend="duckduckgo",
+            timeout=int(_SEARCH_TIMEOUT),
+        ))
+    except TypeError:
+        # Older ddgs versions may not support backend/timeout kwargs
+        return list(DDGS().text(query, max_results=settings.WEB_SEARCH_MAX_RESULTS))
+
+
+def web_search(query: str) -> dict:
+    with ThreadPoolExecutor(max_workers=1) as guard:
+        future = guard.submit(_search_and_fetch, query)
+        try:
+            return future.result(timeout=_OVERALL_TIMEOUT)
+        except FutureTimeoutError:
+            return {"context": "", "sources": []}
+
+
+def _search_and_fetch(query: str) -> dict:
+    try:
+        results = _do_search(query)
     except Exception:
         return {"context": "", "sources": []}
 
-    hrefs = [r.get("href", "").strip() for r in results]
+    if not results:
+        return {"context": "", "sources": []}
+
+    hrefs = [r.get("href", "").strip() for r in results if r.get("href", "").strip()]
     page_contents = {}
-    with ThreadPoolExecutor(max_workers=min(8, max(1, len(hrefs)))) as pool:
-        for href, content in zip(hrefs, pool.map(_fetch_page, hrefs)):
-            if href:
-                page_contents[href] = content
+    if hrefs:
+        with ThreadPoolExecutor(max_workers=min(5, len(hrefs))) as pool:
+            try:
+                for href, content in zip(hrefs, pool.map(_fetch_page, hrefs, timeout=_PAGE_FETCH_TIMEOUT + 2)):
+                    if content:
+                        page_contents[href] = content
+            except FutureTimeoutError:
+                pass  # use whatever snippets we have; page content is best-effort
 
     texts, sources = [], []
     for r in results:
