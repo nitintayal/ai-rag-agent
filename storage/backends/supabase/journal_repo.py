@@ -33,13 +33,13 @@ def get_entry(entry_id: str, user_id: str) -> Optional[dict]:
 def add_entry(user_id: str, content: str, title: str | None = None,
               mood: str | None = None, tags: list[str] | None = None,
               entry_date: date | str | None = None) -> dict:
-    from storage.backends.embedding_utils import safe_embed
+    from storage.backends.embedding_utils import safe_embed, build_search_text
     sb = get_supabase()
     entry_id = str(uuid4())
     now = datetime.now(timezone.utc).isoformat()
     ed = str(entry_date or date.today())
     tag_list = tags or []
-    search_text = _build_search_text(title, content, mood, tag_list)
+    search_text = build_search_text(title, content, mood, tag_list)
     embedding = safe_embed(search_text)
     row = {
         "id": entry_id, "user_id": user_id, "title": title, "content": content,
@@ -52,7 +52,7 @@ def add_entry(user_id: str, content: str, title: str | None = None,
 
 
 def update_entry(entry_id: str, user_id: str, **fields) -> Optional[dict]:
-    from storage.backends.embedding_utils import safe_embed
+    from storage.backends.embedding_utils import safe_embed, build_search_text
     current = get_entry(entry_id, user_id)
     if not current:
         return None
@@ -60,7 +60,7 @@ def update_entry(entry_id: str, user_id: str, **fields) -> Optional[dict]:
         if val is not None:
             current[key] = val
     now = datetime.now(timezone.utc).isoformat()
-    search_text = _build_search_text(current["title"], current["content"], current["mood"], current["tags"])
+    search_text = build_search_text(current["title"], current["content"], current["mood"], current["tags"])
     embedding = safe_embed(search_text)
     sb = get_supabase()
     sb.table("journal_entries").update({
@@ -115,8 +115,3 @@ def _serialize(row: dict) -> dict:
     d["entry_date"] = str(d.get("entry_date", ""))
     d.pop("embedding", None)
     return d
-
-
-def _build_search_text(title, content, mood, tags) -> str:
-    tag_str = " ".join(tags) if tags else ""
-    return "\n".join(p for p in [title or "", content or "", mood or "", tag_str] if p)

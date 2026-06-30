@@ -37,14 +37,14 @@ def get_entry(entry_id: str, user_id: str) -> Optional[dict]:
 def add_entry(user_id: str, content: str, title: str | None = None,
               mood: str | None = None, tags: list[str] | None = None,
               entry_date: date | None = None) -> dict:
-    from storage.backends.embedding_utils import safe_embed
+    from storage.backends.embedding_utils import safe_embed, build_search_text
 
     now = datetime.now(timezone.utc).isoformat()
     ed = str(entry_date or date.today())
     entry_id = str(uuid4())
     tag_list = tags or []
 
-    search_text = _build_search_text(title, content, mood, tag_list)
+    search_text = build_search_text(title, content, mood, tag_list)
     embedding = safe_embed(search_text)
 
     with get_connection() as conn:
@@ -59,7 +59,7 @@ def add_entry(user_id: str, content: str, title: str | None = None,
 
 
 def update_entry(entry_id: str, user_id: str, **fields) -> Optional[dict]:
-    from storage.backends.embedding_utils import safe_embed
+    from storage.backends.embedding_utils import safe_embed, build_search_text
 
     current = get_entry(entry_id, user_id)
     if not current:
@@ -70,7 +70,7 @@ def update_entry(entry_id: str, user_id: str, **fields) -> Optional[dict]:
             current[key] = val
 
     now = datetime.now(timezone.utc).isoformat()
-    search_text = _build_search_text(current["title"], current["content"], current["mood"], current["tags"])
+    search_text = build_search_text(current["title"], current["content"], current["mood"], current["tags"])
     embedding = safe_embed(search_text)
 
     with get_connection() as conn:
@@ -133,8 +133,3 @@ def _serialize_row(row) -> dict:
     d["tags"] = json.loads(d["tags"]) if d.get("tags") else []
     d["entry_date"] = str(d["entry_date"])
     return d
-
-
-def _build_search_text(title, content, mood, tags) -> str:
-    tag_str = " ".join(tags) if tags else ""
-    return "\n".join(p for p in [title or "", content or "", mood or "", tag_str] if p)
