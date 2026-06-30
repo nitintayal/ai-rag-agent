@@ -27,10 +27,17 @@ _MAX_RETRIES = 2
 _RETRY_DELAY = 2
 
 
-def _is_rate_limited(error: Exception) -> bool:
+def _should_try_next_model(error: Exception) -> bool:
+    """429 (rate limited) or 404 (model deprecated/renamed) — both mean 'skip to next model'."""
     if isinstance(error, httpx.HTTPStatusError):
-        return error.response.status_code == 429
-    return "429" in str(error) or "rate limit" in str(error).lower()
+        return error.response.status_code in (404, 429)
+    msg = str(error).lower()
+    return "429" in msg or "404" in msg or "rate limit" in msg or "not found" in msg
+
+
+def _is_invalid_model(error: Exception) -> bool:
+    """404 means the model ID itself is bad — no point retrying the same model."""
+    return isinstance(error, httpx.HTTPStatusError) and error.response.status_code == 404
 
 
 class OpenRouterClient:
@@ -87,13 +94,17 @@ class OpenRouterClient:
                         return resp.json()["choices"][0]["message"]["content"]
                 except Exception as e:
                     last_error = e
-                    if _is_rate_limited(e):
+                    if _is_invalid_model(e):
+                        logger.warning(f"OpenRouter model '{m}' not found (404) — likely deprecated/renamed, trying next model")
+                        break  # no point retrying a nonexistent model
+                    if _should_try_next_model(e):
                         logger.warning(f"OpenRouter {m} rate-limited (attempt {attempt+1}): {e}")
                         if attempt < _MAX_RETRIES - 1:
                             time.sleep(_RETRY_DELAY)
                         continue
                     raise
-            logger.warning(f"OpenRouter {m} exhausted retries, trying next model")
+            else:
+                logger.warning(f"OpenRouter {m} exhausted retries, trying next model")
         raise last_error
 
     def generate(self, prompt: str, model: str | None = None, system: str | None = None) -> str:
@@ -140,7 +151,7 @@ class OpenRouterClient:
                 return
             except Exception as e:
                 last_error = e
-                if _is_rate_limited(e):
+                if _should_try_next_model(e):
                     logger.warning(f"OpenRouter stream {m} rate-limited, trying next model: {e}")
                     continue
                 raise
