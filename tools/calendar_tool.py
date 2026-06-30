@@ -1,10 +1,7 @@
-"""Calendar tool: simple event management backed by SQLite."""
-
-from datetime import datetime, timezone
-from uuid import uuid4
+"""Calendar tool: simple event management via the storage abstraction."""
 
 from tools.base import BaseTool, ToolDefinition, ToolResult
-from storage.database import get_connection
+from storage.repositories import calendar_repo
 
 
 class CalendarTool(BaseTool):
@@ -19,36 +16,19 @@ class CalendarTool(BaseTool):
                 **kwargs) -> ToolResult:
         try:
             if action == "create" and title and start_time:
-                eid = str(uuid4())
-                now = datetime.now(timezone.utc).isoformat()
-                with get_connection() as conn:
-                    conn.execute(
-                        """INSERT INTO calendar_events (id, user_id, title, description, start_time, end_time, created_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                        (eid, user_id, title, description, start_time, end_time, now),
-                    )
+                event = calendar_repo.create_event(user_id, title, start_time, end_time, description)
                 return ToolResult(
                     context=f"Event created: '{title}' at {start_time}",
-                    data={"id": eid, "title": title, "start_time": start_time},
+                    data=event,
                 )
             elif action == "list":
-                with get_connection() as conn:
-                    rows = conn.execute(
-                        """SELECT * FROM calendar_events WHERE user_id = ?
-                           ORDER BY start_time ASC LIMIT 20""",
-                        (user_id,),
-                    ).fetchall()
-                if not rows:
+                events = calendar_repo.list_events(user_id)
+                if not events:
                     return ToolResult(context="No upcoming events.")
-                lines = [f"- {r['title']} at {r['start_time']}" for r in rows]
-                return ToolResult(context=f"Events ({len(rows)}):\n" + "\n".join(lines))
+                lines = [f"- {e['title']} at {e['start_time']}" for e in events]
+                return ToolResult(context=f"Events ({len(events)}):\n" + "\n".join(lines))
             elif action == "delete" and event_id:
-                with get_connection() as conn:
-                    cursor = conn.execute(
-                        "DELETE FROM calendar_events WHERE id = ? AND user_id = ?",
-                        (event_id, user_id),
-                    )
-                if cursor.rowcount > 0:
+                if calendar_repo.delete_event(event_id, user_id):
                     return ToolResult(context="Event deleted.")
                 return ToolResult(context="Event not found.")
             else:

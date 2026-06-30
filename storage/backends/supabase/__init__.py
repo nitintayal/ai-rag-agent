@@ -2,7 +2,7 @@
 
 from storage.backends.base import StorageBackend
 from storage.backends.supabase import (
-    user_repo, conversation_repo, journal_repo, task_repo, memory_repo
+    user_repo, conversation_repo, journal_repo, task_repo, memory_repo, verification_repo, calendar_repo
 )
 
 
@@ -15,4 +15,6 @@ def create_backend() -> StorageBackend:
         journal=journal_repo,
         task=task_repo,
         memory=memory_repo,
+        verification=verification_repo,
+        calendar=calendar_repo,
     )

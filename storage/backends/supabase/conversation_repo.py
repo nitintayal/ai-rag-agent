@@ -56,3 +56,10 @@ def get_messages(conversation_id: str, limit: int = 20) -> list[dict]:
               .limit(limit)
               .execute())
     return list(reversed(result.data))
+
+
+def delete_conversation(conversation_id: str) -> bool:
+    sb = get_supabase()
+    sb.table("messages").delete().eq("conversation_id", conversation_id).execute()
+    result = sb.table("conversations").delete().eq("id", conversation_id).execute()
+    return len(result.data) > 0

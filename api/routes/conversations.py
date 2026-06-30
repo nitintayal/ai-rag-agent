@@ -33,8 +33,5 @@ def delete_conversation(conversation_id: str, user: dict = Depends(get_current_u
     conv = conversation_repo.get_conversation(conversation_id)
     if not conv or conv["user_id"] != user["id"]:
         raise HTTPException(404, "Conversation not found")
-    from storage.database import get_connection
-    with get_connection() as conn:
-        conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conversation_id,))
-        conn.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+    conversation_repo.delete_conversation(conversation_id)
     return {"status": "deleted"}

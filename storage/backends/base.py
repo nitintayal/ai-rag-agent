@@ -26,6 +26,20 @@ class BaseUserRepo(ABC):
     def create_user(self, email: str, name: str, password: str | None = None,
                     auth_provider: str = "local", avatar_url: str | None = None) -> dict: ...
 
+    @abstractmethod
+    def update_user(self, user_id: str, **fields) -> Optional[dict]: ...
+
+
+class BaseVerificationRepo(ABC):
+    @abstractmethod
+    def create_code(self, email: str, code: str, purpose: str, expires_at: str) -> dict: ...
+
+    @abstractmethod
+    def verify_and_consume(self, email: str, code: str, purpose: str) -> bool: ...
+
+    @abstractmethod
+    def invalidate_pending(self, email: str, purpose: str) -> None: ...
+
 
 class BaseConversationRepo(ABC):
     @abstractmethod
@@ -44,6 +58,9 @@ class BaseConversationRepo(ABC):
 
     @abstractmethod
     def get_messages(self, conversation_id: str, limit: int = 20) -> list[dict]: ...
+
+    @abstractmethod
+    def delete_conversation(self, conversation_id: str) -> bool: ...
 
 
 class BaseJournalRepo(ABC):
@@ -104,11 +121,25 @@ class BaseMemoryRepo(ABC):
     def delete_memory(self, user_id: str, key: str) -> bool: ...
 
 
+class BaseCalendarRepo(ABC):
+    @abstractmethod
+    def create_event(self, user_id: str, title: str, start_time: str,
+                     end_time: str | None = None, description: str | None = None) -> dict: ...
+
+    @abstractmethod
+    def list_events(self, user_id: str, limit: int = 20) -> list[dict]: ...
+
+    @abstractmethod
+    def delete_event(self, event_id: str, user_id: str) -> bool: ...
+
+
 class StorageBackend:
     """Container for all repository implementations of a backend."""
-    def __init__(self, user, conversation, journal, task, memory):
+    def __init__(self, user, conversation, journal, task, memory, verification=None, calendar=None):
         self.user = user
         self.conversation = conversation
         self.journal = journal
         self.task = task
         self.memory = memory
+        self.verification = verification
+        self.calendar = calendar

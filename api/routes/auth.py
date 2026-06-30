@@ -9,13 +9,12 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, Field
 
 from auth.passwords import hash_password, verify_password
-from auth.jwt_utils import create_token, decode_token
+from auth.jwt_utils import create_token
 from auth.google_oauth import verify_google_token
 from auth.email import send_verification_email, send_password_reset_email
 from api.dependencies import get_current_user
 from configs.config import settings
-from storage.database import get_connection
-from storage.repositories import user_repo
+from storage.repositories import user_repo, verification_repo
 
 router = APIRouter(prefix="/auth")
 logger = logging.getLogger(__name__)
@@ -37,30 +36,12 @@ def _check_rate_limit(request: Request):
 def _create_verification_code(email: str, purpose: str) -> str:
     code = secrets.token_urlsafe(32)
     expires = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
-    vid = secrets.token_hex(16)
-    with get_connection() as conn:
-        conn.execute(
-            "UPDATE verification_codes SET used = 1 WHERE email = ? AND purpose = ? AND used = 0",
-            (email, purpose),
-        )
-        conn.execute(
-            "INSERT INTO verification_codes (id, email, code, purpose, expires_at) VALUES (?, ?, ?, ?, ?)",
-            (vid, email, code, purpose, expires),
-        )
+    verification_repo.create_code(email, code, purpose, expires)
     return code
 
 
 def _verify_code(email: str, code: str, purpose: str) -> bool:
-    now = datetime.now(timezone.utc).isoformat()
-    with get_connection() as conn:
-        row = conn.execute(
-            "SELECT id FROM verification_codes WHERE email = ? AND code = ? AND purpose = ? AND used = 0 AND expires_at > ?",
-            (email, code, purpose, now),
-        ).fetchone()
-        if not row:
-            return False
-        conn.execute("UPDATE verification_codes SET used = 1 WHERE id = ?", (row["id"],))
-    return True
+    return verification_repo.verify_and_consume(email, code, purpose)
 
 
 # ── Schemas ──────────────────────────────────────────────────────
@@ -103,11 +84,6 @@ class ChangePasswordRequest(BaseModel):
 
 # ── Register ─────────────────────────────────────────────────────
 
-class RegisterResponse(BaseModel):
-    status: str
-    message: str
-
-
 @router.post("/register")
 def register(body: RegisterRequest, request: Request):
     _check_rate_limit(request)
@@ -129,9 +105,7 @@ def register(body: RegisterRequest, request: Request):
         send_verification_email(body.email, code, settings.FRONTEND_URL)
         return {"status": "verification_sent", "message": "Check your email for a verification link."}
 
-    with get_connection() as conn:
-        conn.execute("UPDATE users SET email_verified = 1 WHERE email = ?", (body.email,))
-    user = user_repo.get_user_by_email(body.email)
+    user = user_repo.update_user(user["id"], email_verified=True)
     token = create_token(user["id"], user["email"], settings.JWT_SECRET)
     return {"status": "ok", "token": token, "user": user}
 
@@ -143,13 +117,11 @@ def verify_email(body: VerifyEmailRequest):
     if not _verify_code(body.email, body.code, "email_verify"):
         raise HTTPException(400, "Invalid or expired verification code")
 
-    with get_connection() as conn:
-        conn.execute("UPDATE users SET email_verified = 1 WHERE email = ?", (body.email,))
-
     user = user_repo.get_user_by_email(body.email)
     if not user:
         raise HTTPException(404, "User not found")
 
+    user = user_repo.update_user(user["id"], email_verified=True)
     token = create_token(user["id"], user["email"], settings.JWT_SECRET)
     return {"status": "email_verified", "token": token, "user": user}
 
@@ -160,13 +132,15 @@ def verify_email(body: VerifyEmailRequest):
 def login(body: LoginRequest, request: Request):
     _check_rate_limit(request)
 
-    with get_connection() as conn:
-        row = conn.execute("SELECT * FROM users WHERE email = ?", (body.email,)).fetchone()
+    try:
+        user_dict = user_repo.get_user_by_email_with_password(body.email)
+    except Exception as e:
+        logger.error(f"Login lookup failed: {e}", exc_info=True)
+        raise HTTPException(500, "Login temporarily unavailable")
 
-    if not row:
+    if not user_dict:
         raise HTTPException(401, "Invalid email or password")
 
-    user_dict = dict(row)
     if not user_dict.get("password"):
         raise HTTPException(401, "This account uses Google sign-in")
 
@@ -190,26 +164,32 @@ async def google_auth(body: GoogleAuthRequest):
     if not settings.GOOGLE_OAUTH_CLIENT_ID:
         raise HTTPException(501, "Google OAuth not configured")
 
-    google_user = await verify_google_token(body.id_token, settings.GOOGLE_OAUTH_CLIENT_ID)
+    try:
+        google_user = await verify_google_token(body.id_token, settings.GOOGLE_OAUTH_CLIENT_ID)
+    except Exception as e:
+        logger.error(f"Google token verification failed: {e}", exc_info=True)
+        raise HTTPException(500, "Google sign-in temporarily unavailable")
+
     if not google_user:
         raise HTTPException(401, "Invalid Google token")
 
-    existing = user_repo.get_user_by_email(google_user["email"])
-    if existing:
-        if not existing.get("email_verified"):
-            with get_connection() as conn:
-                conn.execute("UPDATE users SET email_verified = 1 WHERE email = ?", (google_user["email"],))
-        user = user_repo.get_user_by_email(google_user["email"])
-    else:
-        user = user_repo.create_user(
-            email=google_user["email"],
-            name=google_user["name"],
-            auth_provider="google",
-            avatar_url=google_user.get("picture"),
-        )
-        with get_connection() as conn:
-            conn.execute("UPDATE users SET email_verified = 1 WHERE email = ?", (google_user["email"],))
-        user = user_repo.get_user_by_email(google_user["email"])
+    try:
+        existing = user_repo.get_user_by_email(google_user["email"])
+        if existing:
+            if not existing.get("email_verified"):
+                user_repo.update_user(existing["id"], email_verified=True)
+            user = user_repo.get_user_by_email(google_user["email"])
+        else:
+            user = user_repo.create_user(
+                email=google_user["email"],
+                name=google_user["name"],
+                auth_provider="google",
+                avatar_url=google_user.get("picture"),
+            )
+            user = user_repo.update_user(user["id"], email_verified=True)
+    except Exception as e:
+        logger.error(f"Google auth user creation failed: {e}", exc_info=True)
+        raise HTTPException(500, "Google sign-in failed — please try again")
 
     token = create_token(user["id"], user["email"], settings.JWT_SECRET)
     return {"token": token, "user": user}
@@ -241,8 +221,7 @@ def reset_password(body: ResetPasswordRequest, request: Request):
         raise HTTPException(404, "User not found")
 
     hashed = hash_password(body.new_password)
-    with get_connection() as conn:
-        conn.execute("UPDATE users SET password = ? WHERE email = ?", (hashed, body.email))
+    user_repo.update_user(user["id"], password=hashed)
 
     return {"status": "password_reset"}
 
@@ -258,24 +237,18 @@ async def me(user: dict = Depends(get_current_user)):
 def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_current_user)):
     if not body.name:
         raise HTTPException(400, "Nothing to update")
-    with get_connection() as conn:
-        conn.execute("UPDATE users SET name = ? WHERE id = ?", (body.name, user["id"]))
-    return user_repo.get_user(user["id"])
+    return user_repo.update_user(user["id"], name=body.name)
 
 
 @router.post("/change-password")
 def change_password(body: ChangePasswordRequest, user: dict = Depends(get_current_user)):
-    with get_connection() as conn:
-        row = conn.execute("SELECT password, auth_provider FROM users WHERE id = ?", (user["id"],)).fetchone()
-
-    if not row:
+    user_data = user_repo.get_user_by_email_with_password(user["email"])
+    if not user_data:
         raise HTTPException(404, "User not found")
 
-    user_data = dict(row)
     if user_data.get("auth_provider") == "google" and not user_data.get("password"):
         hashed = hash_password(body.new_password)
-        with get_connection() as conn:
-            conn.execute("UPDATE users SET password = ? WHERE id = ?", (hashed, user["id"]))
+        user_repo.update_user(user["id"], password=hashed)
         return {"status": "password_set"}
 
     if not user_data.get("password"):
@@ -285,6 +258,5 @@ def change_password(body: ChangePasswordRequest, user: dict = Depends(get_curren
         raise HTTPException(401, "Current password is incorrect")
 
     hashed = hash_password(body.new_password)
-    with get_connection() as conn:
-        conn.execute("UPDATE users SET password = ? WHERE id = ?", (hashed, user["id"]))
+    user_repo.update_user(user["id"], password=hashed)
     return {"status": "password_changed"}

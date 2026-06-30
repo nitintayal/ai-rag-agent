@@ -17,3 +17,6 @@ def add_message(conversation_id, role, content, tool_name=None, tool_result=None
 
 def get_messages(conversation_id, limit=20):
     return get_backend().conversation.get_messages(conversation_id, limit)
+
+def delete_conversation(conversation_id):
+    return get_backend().conversation.delete_conversation(conversation_id)

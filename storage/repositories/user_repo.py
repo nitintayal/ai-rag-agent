@@ -12,5 +12,11 @@ def get_user(user_id):
 def get_user_by_email(email):
     return get_backend().user.get_user_by_email(email)
 
+def get_user_by_email_with_password(email):
+    return get_backend().user.get_user_by_email_with_password(email)
+
 def create_user(email, name, password=None, auth_provider="local", avatar_url=None):
     return get_backend().user.create_user(email, name, password, auth_provider, avatar_url)
+
+def update_user(user_id, **fields):
+    return get_backend().user.update_user(user_id, **fields)

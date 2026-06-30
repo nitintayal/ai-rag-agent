@@ -60,3 +60,10 @@ def get_messages(conversation_id: str, limit: int = 20) -> list[dict]:
             (conversation_id, limit),
         ).fetchall()
         return [dict(r) for r in reversed(rows)]
+
+
+def delete_conversation(conversation_id: str) -> bool:
+    with get_connection() as conn:
+        conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conversation_id,))
+        cursor = conn.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+    return cursor.rowcount > 0
