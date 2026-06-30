@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 from typing import AsyncIterator
 
 import httpx
@@ -14,6 +15,23 @@ _BASE_URL = "https://openrouter.ai/api/v1"
 _DEFAULT_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
 _DEFAULT_TIMEOUT = 60
 
+# Other free models to fall back to if the primary one is rate-limited.
+# Each :free model on OpenRouter has its own independent rate-limit pool.
+_FALLBACK_MODELS = [
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "google/gemini-2.0-flash-exp:free",
+    "deepseek/deepseek-chat:free",
+    "qwen/qwen-2.5-72b-instruct:free",
+]
+_MAX_RETRIES = 2
+_RETRY_DELAY = 2
+
+
+def _is_rate_limited(error: Exception) -> bool:
+    if isinstance(error, httpx.HTTPStatusError):
+        return error.response.status_code == 429
+    return "429" in str(error) or "rate limit" in str(error).lower()
+
 
 class OpenRouterClient:
     def __init__(self, api_key: str, model: str | None = None, timeout: int | None = None):
@@ -25,7 +43,6 @@ class OpenRouterClient:
         return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            # OpenRouter uses these for their public leaderboard / rate-limit fairness — optional but good practice
             "HTTP-Referer": "https://iassistant.in",
             "X-Title": "AI Personal Assistant",
         }
@@ -37,6 +54,11 @@ class OpenRouterClient:
             msgs.insert(0, {"role": "system", "content": sys_content})
         return msgs
 
+    def _models_to_try(self, model: str | None) -> list[str]:
+        primary = model or self.model
+        rest = [m for m in _FALLBACK_MODELS if m != primary]
+        return [primary] + rest
+
     def chat(
         self,
         messages: list[dict],
@@ -45,17 +67,34 @@ class OpenRouterClient:
         format: str | dict | None = None,
     ) -> str:
         payload = {
-            "model": model or self.model,
             "messages": self._build_messages(messages, system),
             "temperature": 0.3,
         }
         if format == "json":
             payload["response_format"] = {"type": "json_object"}
 
-        with httpx.Client(timeout=self.timeout) as client:
-            resp = client.post(f"{_BASE_URL}/chat/completions", json=payload, headers=self._headers())
-            resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
+        last_error = None
+        for m in self._models_to_try(model):
+            for attempt in range(_MAX_RETRIES):
+                try:
+                    with httpx.Client(timeout=self.timeout) as client:
+                        resp = client.post(
+                            f"{_BASE_URL}/chat/completions",
+                            json={**payload, "model": m},
+                            headers=self._headers(),
+                        )
+                        resp.raise_for_status()
+                        return resp.json()["choices"][0]["message"]["content"]
+                except Exception as e:
+                    last_error = e
+                    if _is_rate_limited(e):
+                        logger.warning(f"OpenRouter {m} rate-limited (attempt {attempt+1}): {e}")
+                        if attempt < _MAX_RETRIES - 1:
+                            time.sleep(_RETRY_DELAY)
+                        continue
+                    raise
+            logger.warning(f"OpenRouter {m} exhausted retries, trying next model")
+        raise last_error
 
     def generate(self, prompt: str, model: str | None = None, system: str | None = None) -> str:
         return self.chat([{"role": "user", "content": prompt}], model=model, system=system)
@@ -68,7 +107,6 @@ class OpenRouterClient:
         format: str | dict | None = None,
     ) -> AsyncIterator[str]:
         payload = {
-            "model": model or self.model,
             "messages": self._build_messages(messages, system),
             "temperature": 0.3,
             "stream": True,
@@ -76,25 +114,38 @@ class OpenRouterClient:
         if format == "json":
             payload["response_format"] = {"type": "json_object"}
 
-        async with httpx.AsyncClient(timeout=httpx.Timeout(self.timeout, connect=10)) as client:
-            async with client.stream(
-                "POST", f"{_BASE_URL}/chat/completions", json=payload, headers=self._headers()
-            ) as resp:
-                resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    if not line.strip() or not line.startswith("data: "):
-                        continue
-                    data = line[len("data: "):].strip()
-                    if data == "[DONE]":
-                        break
-                    try:
-                        chunk = json.loads(data)
-                    except json.JSONDecodeError:
-                        continue
-                    delta = chunk.get("choices", [{}])[0].get("delta", {})
-                    token = delta.get("content", "")
-                    if token:
-                        yield token
+        last_error = None
+        for m in self._models_to_try(model):
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(self.timeout, connect=10)) as client:
+                    async with client.stream(
+                        "POST", f"{_BASE_URL}/chat/completions",
+                        json={**payload, "model": m}, headers=self._headers(),
+                    ) as resp:
+                        resp.raise_for_status()
+                        async for line in resp.aiter_lines():
+                            if not line.strip() or not line.startswith("data: "):
+                                continue
+                            data = line[len("data: "):].strip()
+                            if data == "[DONE]":
+                                break
+                            try:
+                                chunk = json.loads(data)
+                            except json.JSONDecodeError:
+                                continue
+                            delta = chunk.get("choices", [{}])[0].get("delta", {})
+                            token = delta.get("content", "")
+                            if token:
+                                yield token
+                return
+            except Exception as e:
+                last_error = e
+                if _is_rate_limited(e):
+                    logger.warning(f"OpenRouter stream {m} rate-limited, trying next model: {e}")
+                    continue
+                raise
+        if last_error:
+            yield f"\n\n[All OpenRouter free models are rate-limited right now. Try again shortly, or switch provider in Settings. Error: {last_error}]"
 
     async def chat_full_async(
         self,
