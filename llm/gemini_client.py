@@ -16,6 +16,14 @@ MAX_RETRIES = 2
 RETRY_DELAY = 2
 
 
+def _is_quota_exhausted(error: Exception | None) -> bool:
+    """Daily quota errors shouldn't be retried — they won't recover within seconds."""
+    if error is None:
+        return False
+    err_str = str(error)
+    return "RESOURCE_EXHAUSTED" in err_str or "PerDay" in err_str or "FreeTier" in err_str
+
+
 class GeminiClient:
     def __init__(self, api_key: str, model: str = "gemini-2.5-flash"):
         self.model = model
@@ -29,18 +37,29 @@ class GeminiClient:
 
         last_error = None
         for model in models_to_try:
+            # Daily quota exhausted — retrying the same model is pointless, skip straight to next
+            if _is_quota_exhausted(last_error):
+                logger.warning(f"Skipping retries, daily quota exhausted — trying {model}")
+                try:
+                    return fn(model=model, **kwargs)
+                except Exception as e:
+                    last_error = e
+                    continue
+
             for attempt in range(MAX_RETRIES):
                 try:
                     return fn(model=model, **kwargs)
                 except Exception as e:
                     last_error = e
+                    if _is_quota_exhausted(e):
+                        logger.warning(f"{model} daily quota exhausted, moving to next model")
+                        break
                     err_str = str(e)
                     if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str:
                         logger.warning(f"{model} attempt {attempt+1} failed: {e}")
                         time.sleep(RETRY_DELAY * (attempt + 1))
                         continue
                     raise
-            logger.warning(f"All retries exhausted for {model}, trying next model")
         raise last_error
 
     def chat(
@@ -93,6 +112,7 @@ class GeminiClient:
             config["response_mime_type"] = "application/json"
 
         models_to_try = [model or self.model] + [m for m in FALLBACK_MODELS if m != (model or self.model)]
+        last_error = None
         for m in models_to_try:
             try:
                 response = self.client.models.generate_content_stream(
@@ -103,10 +123,16 @@ class GeminiClient:
                         yield chunk.text
                 return
             except Exception as e:
+                last_error = e
+                if _is_quota_exhausted(e):
+                    logger.warning(f"Stream {m} daily quota exhausted, trying next model")
+                    continue
                 if "503" in str(e) or "UNAVAILABLE" in str(e) or "429" in str(e):
                     logger.warning(f"Stream {m} unavailable, trying next: {e}")
                     continue
                 raise
+        if last_error:
+            yield f"\n\n[All Gemini models exhausted their free quota for today. Error: {last_error}]"
 
     async def chat_full_async(
         self,
