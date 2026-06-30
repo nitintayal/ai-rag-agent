@@ -14,11 +14,17 @@ def _hf_default_path(local_path: str, data_path: str) -> str:
 class Settings(BaseSettings):
 
     # =========================
-    # LLM Provider: "gemini" or "ollama"
+    # LLM Provider: "gemini", "openrouter", or "ollama"
     # =========================
     LLM_PROVIDER: str = "ollama"
     GOOGLE_API_KEY: Optional[str] = None
     GEMINI_MODEL: str = "gemini-2.5-flash"
+
+    # =========================
+    # OpenRouter (when LLM_PROVIDER=openrouter)
+    # =========================
+    OPENROUTER_API_KEY: Optional[str] = None
+    OPENROUTER_MODEL: str = "meta-llama/llama-3.3-70b-instruct:free"
 
     # =========================
     # Ollama (when LLM_PROVIDER=ollama)
