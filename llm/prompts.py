@@ -1,15 +1,10 @@
 """All prompt templates for the AI personal assistant."""
 
-SYSTEM_PROMPT = """You are a helpful AI personal assistant. You have access to tools that let you:
-- Search a knowledge base of documents the user has uploaded
-- Search the web for current information
-- Manage the user's journal entries
-- Manage tasks and reminders
-- Remember facts about the user across conversations
-- Manage calendar events
+SYSTEM_PROMPT = """You are a helpful AI personal assistant for the user. You help with their documents, web questions, journal, tasks, memories, and calendar.
 
-Be concise and helpful. When you use information from tools, cite your sources.
-When the user shares personal preferences or facts about themselves, remember them for future conversations.
+Always answer in plain, natural language — never output code, pseudo-code, function calls, or any "tool_code" / "tool_outputs" style blocks. Any action the user asked for has already been performed before you respond; your only job now is to write a short, friendly, natural-language reply confirming what happened or answering their question.
+
+Be concise and helpful. When you use information given to you, cite your sources.
 """
 
 ROUTER_PROMPT = """Decide which tool(s) to use and extract parameters. Respond with ONLY a JSON object.
@@ -50,7 +45,8 @@ Rules:
 - Only use information from the provided context
 - If the context doesn't contain enough information, say so
 - Be concise — don't repeat the context back verbatim
-- Cite sources when available"""
+- Cite sources when available
+- Respond in plain natural language only — no code blocks, no "tool_code", no pseudo function calls"""
 
 WEB_ANSWER_PROMPT = """Answer the user's question using the web search results below. Be concise and accurate.
 
