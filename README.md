@@ -71,7 +71,7 @@ API Layer  →  Auth Layer
 | **LLM** | Gemini + Ollama clients, prompt templates, model management | `llm/factory.py`, `llm/gemini_client.py`, `llm/ollama_client.py` |
 | **Tools** | 6 tools with uniform `BaseTool` interface and registry | `tools/base.py`, `tools/registry.py`, `tools/*.py` |
 | **Memory** | Conversation history + long-term user facts + context builder | `memory/` |
-| **Retrieval** | FAISS + BM25 hybrid search, cross-encoder reranking, ingestion | `retrieval/`, `embeddings/`, `ranker/`, `ingestion/` |
+| **Retrieval** | FAISS + BM25 hybrid search, cross-encoder reranking, ingestion | `rag/` |
 | **Storage** | Plug-and-play database with abstract base + SQLite/Supabase backends | `storage/factory.py`, `storage/backends/` |
 
 ### Tools
@@ -191,28 +191,19 @@ ai-rag-agent/
 │           ├── task_repo.py
 │           └── memory_repo.py
 │
-├── retrieval/                        # Retrieval Layer
-│   └── vector_store.py               #   FAISS + BM25 hybrid search
-├── embeddings/
-│   └── sentence_embeddings.py        #   SentenceTransformer wrapper
-├── ranker/
-│   └── cross_encoder.py              #   Cross-encoder reranking
-├── ingestion/                        #   Document ingestion pipeline
+├── rag/                               # Retrieval Layer (consolidated)
+│   ├── vector_store.py               #   FAISS + BM25 hybrid search
+│   ├── embeddings.py                 #   SentenceTransformer wrapper
+│   ├── reranker.py                   #   Cross-encoder reranking
 │   ├── load_documents.py             #   PDF, TXT, XLSX, CSV loaders
 │   ├── chunk_documents.py            #   Token-based chunking (tiktoken)
-│   └── ingest_documents.py           #   Orchestration
+│   └── ingest_documents.py           #   Ingestion orchestration
 │
-├── mcp_servers/                      #   MCP Tool Servers (stdio)
-│   ├── servers.json
-│   ├── client/mcp_client.py
-│   └── servers/
-│       ├── rag_server.py
-│       ├── web_server.py
-│       └── journal_server.py
+├── docs/
+│   └── ARCHITECTURE.md               #   Deep technical reference
 │
 ├── configs/config.py                 #   Pydantic BaseSettings
-├── start.py                          #   Cloud entry point (Render)
-├── render.yaml                       #   Render blueprint
+├── render.yaml                       #   Render blueprint (start command: uvicorn api.app:app)
 ├── .env.example                      #   Config template
 ├── requirements.txt                  #   Full dependencies (local)
 └── requirements-cloud.txt            #   Cloud dependencies (no torch)

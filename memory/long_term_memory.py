@@ -31,7 +31,7 @@ class UserMemory:
     @staticmethod
     def _safe_embed(text: str) -> list[float] | None:
         try:
-            from embeddings.sentence_embeddings import embed_query
+            from rag.embeddings import embed_query
             return embed_query(text).tolist()
         except ImportError:
             return None

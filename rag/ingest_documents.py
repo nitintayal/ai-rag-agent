@@ -1,7 +1,7 @@
-from ingestion.load_documents import load_documents, load_single_file, resolve_data_path
-from ingestion.chunk_documents import chunk_documents
-from embeddings.sentence_embeddings import embed_texts
-from retrieval.vector_store import VectorStore
+from rag.load_documents import load_documents, load_single_file, resolve_data_path
+from rag.chunk_documents import chunk_documents
+from rag.embeddings import embed_texts
+from rag.vector_store import VectorStore
 from configs.config import settings
 
 

@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 def safe_embed(text: str) -> str:
     try:
-        from embeddings.sentence_embeddings import embed_query
+        from rag.embeddings import embed_query
         return json.dumps(embed_query(text).tolist())
     except ImportError:
         logger.debug("sentence_transformers not available — skipping embeddings")

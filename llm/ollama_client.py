@@ -11,6 +11,11 @@ _DEFAULT_BASE_URL = "http://localhost:11434"
 _DEFAULT_MODEL = "qwen2.5:7b"
 _DEFAULT_TIMEOUT = 120
 
+# Commonly used local models — shown as suggestions in Settings UI.
+# Ollama has no "list of all models" API; user can pull any model and
+# enter its name manually too.
+KNOWN_MODELS = ["qwen2.5:7b", "llama3.1:8b", "mistral:7b"]
+
 
 class OllamaClient:
     def __init__(

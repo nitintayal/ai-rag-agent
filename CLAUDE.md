@@ -4,13 +4,13 @@ This file helps AI coding agents (Claude Code, Copilot, etc.) understand the pro
 
 ## What This Is
 
-An AI personal assistant with chat, RAG, web search, tasks, journal, memory, and calendar. FastAPI backend + React frontend. Deployed on Render (backend) + Vercel (frontend).
+An AI personal assistant with chat, RAG, web search, tasks, journal, memory, and calendar. FastAPI backend + React frontend. Deployed on Render (backend) + Vercel (frontend), custom domain via Supabase-backed cloud DB.
 
 ## How to Run
 
 ```bash
 source venv/bin/activate
-python -m api.app           # starts on port 8000
+uvicorn api.app:app --reload   # starts on port 8000 (matches render.yaml's start command)
 ```
 
 Frontend: `cd ../ai-rag-ui && npm run dev`
@@ -22,41 +22,51 @@ Frontend: `cd ../ai-rag-ui && npm run dev`
 ```
 api/          → FastAPI routes, auth dependencies, schemas
 auth/         → JWT, bcrypt, Google OAuth, Resend email
-agent/        → LangGraph graph (route → execute → generate → extract_memory)
-llm/          → factory.py picks Gemini or Ollama based on LLM_PROVIDER
+agent/        → LangGraph graph (route → execute_tool(s) → generate → extract_memory)
+llm/          → factory.py picks Gemini, OpenRouter, or Ollama — per-user override supported
 tools/        → 6 tools with BaseTool interface (rag, web, journal, task, memory, calendar)
 memory/       → conversation history + long-term user facts + context builder
 storage/      → plug-and-play DB: factory.py → backends/sqlite/ or backends/supabase/
-retrieval/    → FAISS + BM25 hybrid search (local only, not on cloud)
+rag/          → FAISS + BM25 hybrid search, embeddings, reranking, ingestion (consolidated)
 ```
 
 ## Key Patterns
 
-- **Storage dispatchers**: `storage/repositories/*.py` are thin functions that delegate to `storage/factory.get_backend()`. Never put SQL in a repository file — put it in the backend implementation.
-- **Lazy ML imports**: `sentence_transformers`, `torch`, `faiss` are imported inside functions, never at module level. Cloud deployment doesn't have these — use `storage/backends/embedding_utils.safe_embed()`.
-- **LLM factory**: `llm/factory.get_llm_client()` returns either `GeminiClient` or `OllamaClient`. Both have the same interface: `.chat()`, `.chat_stream()`, `.generate()`.
-- **Auth**: All data routes use `Depends(get_current_user)` from `api/dependencies.py`. Auth routes (`/auth/*`) are public.
-- **Config**: `configs/config.py` — Pydantic BaseSettings loading from `.env`. All settings have defaults.
+- **Storage dispatchers**: `storage/repositories/*.py` are thin functions that delegate to `storage/factory.get_backend()`. Never put SQL in a repository file — put it in the backend implementation (`storage/backends/sqlite/` or `storage/backends/supabase/`).
+- **Lazy ML imports**: `sentence_transformers`, `torch`, `faiss` are imported inside functions, never at module level. Cloud deployment (`requirements-cloud.txt`) doesn't have these — use `storage/backends/embedding_utils.safe_embed()` for any embedding call that must degrade gracefully.
+- **LLM factory**: `llm/factory.get_llm_client(provider=None, model=None)` returns `GeminiClient`, `OpenRouterClient`, or `OllamaClient`. All three share the same interface: `.chat()`, `.chat_stream()`, `.generate()`. Per-user overrides are read from `user["llm_provider"]` / `user["llm_model"]` (set via `PATCH /auth/llm-settings`) and threaded through `AgentState` → every node that calls the LLM.
+- **Multi-tool routing**: `agent/nodes.py::route()` makes a single LLM call that returns `{"tools": [{"tool": ..., "args": {...}}, ...]}` — supports calling multiple tools in one turn. Falls back to keyword matching (`_keyword_fallback_route`) if the LLM call fails.
+- **Web search providers**: `tools/web_tool.py` dispatches to `tools/web_search/ddgs_search.py` (free, scraping-based) or `tools/web_search/tavily_search.py` (API key, faster/cleaner) based on `WEB_SEARCH_PROVIDER`.
+- **Auth**: All data routes use `Depends(get_current_user)` from `api/dependencies.py`. `api/routes/auth.py` holds the public "get a token" flows (register, login, Google OAuth, password reset). `api/routes/profile.py` holds the authenticated "manage my account" flows (profile, password change, LLM settings) — both share the `/auth` URL prefix, split purely for file size. Shared rate-limiting (`auth/rate_limit.py`) and verification codes (`auth/verification.py`) live in the `auth/` package.
+- **Config**: `configs/config.py` — Pydantic BaseSettings loading from `.env`. All settings have defaults so a missing `.env` never crashes startup.
+- **Timeouts everywhere**: routing (15s), tool execution (20s), web search (15s hard ceiling) — all bounded so a slow external call (web search, LLM) can never hang a chat request indefinitely. See `agent/runner.py` and `tools/web_search/ddgs_search.py`.
 
 ## Adding a New Tool
 
-1. Create `tools/my_tool.py` implementing `BaseTool`
+1. Create `tools/my_tool.py` implementing `BaseTool` (see `tools/base.py`)
 2. Add to `tools/registry.py`
-3. Add its name + args schema to the router prompt in `llm/prompts.py`
-4. Add keyword triggers in `agent/nodes.py._keyword_fallback_route()`
+3. Add its name + args schema to `ROUTER_PROMPT` in `llm/prompts.py`
+4. Add keyword triggers in `agent/nodes.py::_keyword_fallback_route()`
 
 ## Adding a New Database Backend
 
-1. Create `storage/backends/mydb/` with 5 repo modules matching `storage/backends/base.py`
+1. Create `storage/backends/mydb/` with repo modules matching `storage/backends/base.py` (user, conversation, journal, task, memory, verification, calendar)
 2. Create `__init__.py` with `create_backend() -> StorageBackend`
 3. Add `elif` in `storage/factory.py`
 4. Set `DB_BACKEND=mydb` in `.env`
+
+## Adding a New LLM Provider
+
+1. Create `llm/myprovider_client.py` with `.chat()`, `.chat_stream()`, `.generate()`, `.chat_full_async()` — same signatures as `llm/ollama_client.py`
+2. Add an `elif` in `llm/factory.py::get_llm_client()`
+3. Add config fields in `configs/config.py` (API key, default model)
+4. Add to `llm/factory.py::AVAILABLE_MODELS` so it shows up in Settings UI
 
 ## Files NOT to Edit
 
 - `storage/repositories/*.py` — auto-dispatchers, don't add logic here
 - `storage/backends/base.py` — abstract contracts, change carefully
-- `configs/config.py` — add fields, don't remove (breaks existing .env files)
+- `configs/config.py` — add fields, don't remove (breaks existing `.env` files)
 
 ## Testing
 
@@ -66,10 +76,17 @@ from configs.config import settings
 from storage.factory import get_backend
 get_backend()
 from api.app import app
-print('OK')
+print(f'{len(app.routes)} routes OK')
 "
 ```
 
 ## Environment Variables
 
-Critical ones: `LLM_PROVIDER`, `DB_BACKEND`, `JWT_SECRET`, `GOOGLE_API_KEY` (if gemini), `SUPABASE_URL` + `SUPABASE_KEY` (if supabase). See `.env.example` for all.
+Critical ones: `LLM_PROVIDER` (gemini/openrouter/ollama), `DB_BACKEND` (sqlite/supabase), `JWT_SECRET`, `GOOGLE_API_KEY` (if gemini), `OPENROUTER_API_KEY` (if openrouter), `SUPABASE_URL` + `SUPABASE_KEY` (if supabase), `WEB_SEARCH_PROVIDER` (ddgs/tavily), `TAVILY_API_KEY` (if tavily), `CORS_ORIGINS`. See `.env.example` for all.
+
+## Schema Migrations
+
+When adding columns to `users` or other tables, update **three places**:
+1. `storage/database.py` (`_SCHEMA` — SQLite, used fresh on every deploy since data resets)
+2. `storage/backends/supabase/schema.sql` (for fresh Supabase projects)
+3. An `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` migration snippet for existing Supabase projects (idempotent, safe to re-run)

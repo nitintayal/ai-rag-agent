@@ -30,8 +30,8 @@ async def upload_document(file: UploadFile = File(...), user: dict = Depends(get
         f.write(content)
 
     try:
-        from ingestion.ingest_documents import ingest_documents
-        ingest_documents(settings.DATA_DIR, settings.STORAGE_DIR)
+        from rag.ingest_documents import ingest_documents
+        ingest_documents(single_file=file_path)
     except ImportError:
         raise HTTPException(501, "Document ingestion not available in cloud deployment")
     except Exception as e:
@@ -43,7 +43,7 @@ async def upload_document(file: UploadFile = File(...), user: dict = Depends(get
 @router.delete("/delete")
 async def delete_document(source: str, user: dict = Depends(get_current_user)):
     try:
-        from retrieval.vector_store import VectorStore
+        from rag.vector_store import VectorStore
         store = VectorStore.load(settings.STORAGE_DIR)
         store.delete_by_source(source)
         store.save(settings.STORAGE_DIR)

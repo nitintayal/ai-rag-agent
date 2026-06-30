@@ -17,7 +17,7 @@ _DEFAULT_TIMEOUT = 60
 
 # Other free models to fall back to if the primary one is rate-limited.
 # Each :free model on OpenRouter has its own independent rate-limit pool.
-_FALLBACK_MODELS = [
+FALLBACK_MODELS = [
     "meta-llama/llama-3.3-70b-instruct:free",
     "google/gemini-2.0-flash-exp:free",
     "deepseek/deepseek-chat:free",
@@ -63,7 +63,7 @@ class OpenRouterClient:
 
     def _models_to_try(self, model: str | None) -> list[str]:
         primary = model or self.model
-        rest = [m for m in _FALLBACK_MODELS if m != primary]
+        rest = [m for m in FALLBACK_MODELS if m != primary]
         return [primary] + rest
 
     def chat(

@@ -58,21 +58,20 @@ def reset_client():
     _clients_cache = {}
 
 
-AVAILABLE_MODELS = {
-    "gemini": [
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
-    ],
-    "openrouter": [
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "google/gemini-2.0-flash-exp:free",
-        "deepseek/deepseek-chat:free",
-        "qwen/qwen-2.5-72b-instruct:free",
-    ],
-    "ollama": [
-        "qwen2.5:7b",
-        "llama3.1:8b",
-        "mistral:7b",
-    ],
-}
+def _get_available_models() -> dict[str, list[str]]:
+    """Single source of truth: each client module owns its own model list.
+    Pulling them here (instead of duplicating) means updating a client's
+    fallback chain automatically updates what Settings UI offers.
+    """
+    from llm.gemini_client import FALLBACK_MODELS as gemini_models
+    from llm.openrouter_client import FALLBACK_MODELS as openrouter_models
+    from llm.ollama_client import KNOWN_MODELS as ollama_models
+
+    return {
+        "gemini": gemini_models,
+        "openrouter": openrouter_models,
+        "ollama": ollama_models,
+    }
+
+
+AVAILABLE_MODELS = _get_available_models()

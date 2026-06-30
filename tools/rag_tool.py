@@ -9,7 +9,7 @@ _DOC_SCOPE_TERMS = ("uploaded", "upload", "document", "documents", "file", "file
 
 def _get_store():
     try:
-        from retrieval.vector_store import VectorStore
+        from rag.vector_store import VectorStore
         return VectorStore.load(settings.STORAGE_DIR)
     except Exception:
         return None
@@ -60,7 +60,7 @@ def hybrid_search_documents(query: str) -> tuple[str, list[str], bool]:
         top_docs = scoped[:settings.RERANK_K]
         return _format_docs(top_docs), _unique_sources(top_docs), False
 
-    from embeddings.sentence_embeddings import embed_query
+    from rag.embeddings import embed_query
     query_vector = embed_query(query)
     results = store.hybrid_search(query, query_vector, k=settings.HYBRID_K)
     strong = [r for r in results if r["score"] >= settings.MIN_HYBRID_SCORE]
@@ -68,7 +68,7 @@ def hybrid_search_documents(query: str) -> tuple[str, list[str], bool]:
         return "", [], True
 
     docs = [r["document"] for r in strong]
-    from ranker.cross_encoder import rerank_with_scores
+    from rag.reranker import rerank_with_scores
     reranked = rerank_with_scores(query, docs)
     top_docs = [r["document"] for r in reranked if r["score"] >= settings.MIN_RERANK_SCORE][:settings.RERANK_K]
     if not top_docs:

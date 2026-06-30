@@ -106,7 +106,7 @@ def search_entries(user_id: str, query: str, k: int = 5) -> list[dict]:
         return []
 
     try:
-        from embeddings.sentence_embeddings import embed_query
+        from rag.embeddings import embed_query
         query_vec = np.array(embed_query(query), dtype="float32")
         results = []
         for row in rows:
