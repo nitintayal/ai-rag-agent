@@ -2,7 +2,7 @@
 
 A full-stack AI personal assistant with chat, RAG document search, web search, journal, task management, persistent memory, calendar, and authentication — deployable locally with Ollama or in the cloud with Gemini + Supabase.
 
-**Live Demo:** [ai-rag-ui.vercel.app](https://ai-rag-ui.vercel.app)
+**Live Demo:** [iassistant.in](https://iassistant.in)
 
 ## Features
 
