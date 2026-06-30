@@ -8,8 +8,14 @@ CREATE TABLE IF NOT EXISTS users (
     avatar_url      TEXT,
     auth_provider   TEXT NOT NULL DEFAULT 'local',
     email_verified  BOOLEAN NOT NULL DEFAULT FALSE,
+    llm_provider    TEXT,
+    llm_model       TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- If upgrading an existing Supabase project, run this instead:
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS llm_provider TEXT;
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS llm_model TEXT;
 
 CREATE TABLE IF NOT EXISTS conversations (
     id              TEXT PRIMARY KEY,

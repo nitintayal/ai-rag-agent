@@ -240,6 +240,38 @@ def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_current_
     return user_repo.update_user(user["id"], name=body.name)
 
 
+class UpdateLlmSettingsRequest(BaseModel):
+    llm_provider: Optional[str] = None  # "gemini" | "openrouter" | "ollama" | None (use global default)
+    llm_model: Optional[str] = None
+
+
+@router.patch("/llm-settings")
+def update_llm_settings(body: UpdateLlmSettingsRequest, user: dict = Depends(get_current_user)):
+    valid_providers = {"gemini", "openrouter", "ollama", None, ""}
+    if body.llm_provider not in valid_providers and body.llm_provider is not None:
+        raise HTTPException(400, f"Invalid provider. Use one of: gemini, openrouter, ollama")
+
+    # Empty string means "reset to global default"
+    provider = body.llm_provider or None
+    model = body.llm_model or None
+    return user_repo.update_user(user["id"], llm_provider=provider, llm_model=model)
+
+
+@router.get("/llm-settings/available")
+def available_llm_settings():
+    from llm.factory import AVAILABLE_MODELS
+    from configs.config import settings
+    return {
+        "models": AVAILABLE_MODELS,
+        "global_default_provider": settings.LLM_PROVIDER,
+        "providers_configured": {
+            "gemini": bool(settings.GOOGLE_API_KEY),
+            "openrouter": bool(settings.OPENROUTER_API_KEY),
+            "ollama": True,  # always shown as an option; actual availability depends on local server
+        },
+    }
+
+
 @router.post("/change-password")
 def change_password(body: ChangePasswordRequest, user: dict = Depends(get_current_user)):
     user_data = user_repo.get_user_by_email_with_password(user["email"])

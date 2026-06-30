@@ -16,7 +16,8 @@ from memory.long_term_memory import UserMemory
 logger = logging.getLogger(__name__)
 
 
-def _empty_state(question, user_id, conversation_id, stream=False) -> AgentState:
+def _empty_state(question, user_id, conversation_id, stream=False,
+                 llm_provider=None, llm_model=None) -> AgentState:
     return {
         "question": question,
         "user_id": user_id,
@@ -29,11 +30,15 @@ def _empty_state(question, user_id, conversation_id, stream=False) -> AgentState
         "messages": None,
         "answer": None,
         "stream": stream,
+        "llm_provider": llm_provider,
+        "llm_model": llm_model,
     }
 
 
-def run_agent(question: str, user_id: str, conversation_id: str) -> dict:
-    state = _empty_state(question, user_id, conversation_id)
+def run_agent(question: str, user_id: str, conversation_id: str,
+             llm_provider: str | None = None, llm_model: str | None = None) -> dict:
+    state = _empty_state(question, user_id, conversation_id,
+                         llm_provider=llm_provider, llm_model=llm_model)
     result = agent.invoke(state)
     return {
         "answer": result.get("answer", ""),
@@ -42,11 +47,13 @@ def run_agent(question: str, user_id: str, conversation_id: str) -> dict:
     }
 
 
-async def run_agent_stream(question: str, user_id: str, conversation_id: str) -> AsyncIterator[str]:
+async def run_agent_stream(question: str, user_id: str, conversation_id: str,
+                           llm_provider: str | None = None, llm_model: str | None = None) -> AsyncIterator[str]:
     from agent.nodes import route, execute_tool
     from configs.config import settings
 
-    state = _empty_state(question, user_id, conversation_id, stream=True)
+    state = _empty_state(question, user_id, conversation_id, stream=True,
+                         llm_provider=llm_provider, llm_model=llm_model)
 
     # Send an immediate heartbeat so the HTTP connection opens right away —
     # otherwise route()/execute_tool() can block for 10-30s (e.g. slow web
@@ -100,8 +107,8 @@ async def run_agent_stream(question: str, user_id: str, conversation_id: str) ->
         user_memory_context=profile_context,
     )
 
-    # Stream tokens
-    llm = get_llm_client()
+    # Stream tokens — use this user's preferred provider/model if set
+    llm = get_llm_client(provider=llm_provider, model=llm_model)
     full_answer = []
 
     async for token in llm.chat_stream(messages, system=None):

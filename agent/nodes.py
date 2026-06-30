@@ -17,7 +17,9 @@ _KEYWORD_WEB_TRIGGERS = {"latest", "current", "today", "news", "weather", "stock
 _VALID_TOOLS = {"rag", "web", "journal", "task", "memory", "calendar", "direct"}
 
 
-def _get_llm():
+def _get_llm(state: AgentState | None = None):
+    if state and (state.get("llm_provider") or state.get("llm_model")):
+        return get_llm_client(provider=state.get("llm_provider"), model=state.get("llm_model"))
     return get_llm_client()
 
 
@@ -41,7 +43,7 @@ def _keyword_fallback_route(question: str) -> list[dict]:
 def route(state: AgentState) -> dict:
     """Single LLM call: decide which tool(s) AND extract arguments."""
     question = state["question"]
-    llm = _get_llm()
+    llm = _get_llm(state)
 
     try:
         prompt = ROUTER_PROMPT.format(question=question)
@@ -139,7 +141,7 @@ def generate(state: AgentState) -> dict:
     user_id = state["user_id"]
     conversation_id = state["conversation_id"]
 
-    llm = _get_llm()
+    llm = _get_llm(state)
 
     conv_memory = ConversationMemory(conversation_id, user_id)
     user_memory = UserMemory(user_id)
@@ -179,7 +181,7 @@ def extract_memory(state: AgentState) -> dict:
         return {}
 
     try:
-        llm = _get_llm()
+        llm = _get_llm(state)
         user_memory = UserMemory(state["user_id"])
         user_memory.extract_and_store(
             user_message=state["question"],

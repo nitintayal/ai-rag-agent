@@ -50,7 +50,7 @@ def create_user(email: str, name: str, password: str | None = None,
 
 
 def update_user(user_id: str, **fields) -> Optional[dict]:
-    allowed = {"name", "password", "avatar_url", "email_verified"}
+    allowed = {"name", "password", "avatar_url", "email_verified", "llm_provider", "llm_model"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return get_user(user_id)

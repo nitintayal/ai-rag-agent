@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
     conversation_id = req.conversation_id or str(uuid4())
     user_id = user["id"]
+    llm_provider = user.get("llm_provider")
+    llm_model = user.get("llm_model")
 
     # Auto-title new conversations from the first message
     from storage.repositories import conversation_repo
@@ -27,7 +29,10 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
 
     async def event_stream():
         try:
-            async for token in run_agent_stream(req.question, user_id, conversation_id):
+            async for token in run_agent_stream(
+                req.question, user_id, conversation_id,
+                llm_provider=llm_provider, llm_model=llm_model,
+            ):
                 data = json.dumps({"token": token})
                 yield f"data: {data}\n\n"
             yield f"data: {json.dumps({'done': True, 'conversation_id': conversation_id})}\n\n"
@@ -44,8 +49,13 @@ async def chat_sync(req: ChatRequest, user: dict = Depends(get_current_user)):
     import asyncio
     conversation_id = req.conversation_id or str(uuid4())
     user_id = user["id"]
+    llm_provider = user.get("llm_provider")
+    llm_model = user.get("llm_model")
     try:
-        result = await asyncio.to_thread(run_agent, req.question, user_id, conversation_id)
+        result = await asyncio.to_thread(
+            run_agent, req.question, user_id, conversation_id,
+            llm_provider=llm_provider, llm_model=llm_model,
+        )
         return ChatResponse(
             answer=result["answer"],
             sources=result.get("sources", []),

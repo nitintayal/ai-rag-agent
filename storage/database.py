@@ -41,6 +41,8 @@ CREATE TABLE IF NOT EXISTS users (
     avatar_url  TEXT,
     auth_provider TEXT NOT NULL DEFAULT 'local',
     email_verified INTEGER NOT NULL DEFAULT 0,
+    llm_provider TEXT,
+    llm_model   TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

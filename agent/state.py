@@ -13,3 +13,5 @@ class AgentState(TypedDict):
     messages: Optional[list[dict]]
     answer: Optional[str]
     stream: Optional[bool]
+    llm_provider: Optional[str]
+    llm_model: Optional[str]

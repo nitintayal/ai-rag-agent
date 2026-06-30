@@ -52,7 +52,7 @@ def create_user(email: str, name: str, password: str | None = None,
 
 
 def update_user(user_id: str, **fields) -> Optional[dict]:
-    allowed = {"name", "password", "avatar_url", "email_verified"}
+    allowed = {"name", "password", "avatar_url", "email_verified", "llm_provider", "llm_model"}
     set_clauses = []
     values = []
     for key, val in fields.items():
