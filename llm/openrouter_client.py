@@ -19,9 +19,9 @@ _DEFAULT_TIMEOUT = 60
 # Each :free model on OpenRouter has its own independent rate-limit pool.
 FALLBACK_MODELS = [
     "meta-llama/llama-3.3-70b-instruct:free",
-    "google/gemini-2.0-flash-exp:free",
-    "deepseek/deepseek-chat:free",
-    "qwen/qwen-2.5-72b-instruct:free",
+    "google/gemma-4-31b-it:free",
+    "nousresearch/hermes-3-llama-3.1-405b:free",
+    "qwen/qwen3-coder:free",
 ]
 _MAX_RETRIES = 2
 _RETRY_DELAY = 2
