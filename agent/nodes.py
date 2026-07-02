@@ -113,6 +113,7 @@ def execute_tool(state: AgentState) -> dict:
                 all_sources.extend(result.sources or [])
             elif result.error:
                 logger.error(f"Tool {plan['tool']} error: {result.error}")
+                all_context.append(f"[{plan['tool'].upper()} error]\n{result.error}")
 
         return {"context": "\n\n".join(all_context), "sources": all_sources}
 

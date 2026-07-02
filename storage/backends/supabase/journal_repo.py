@@ -46,7 +46,9 @@ def add_entry(user_id: str, content: str, title: str | None = None,
         "mood": mood, "tags": json.dumps(tag_list), "entry_date": ed,
         "embedding": embedding, "created_at": now,
     }
-    sb.table("journal_entries").insert(row).execute()
+    result = sb.table("journal_entries").insert(row).execute()
+    if not result.data:
+        raise RuntimeError("Journal entry insert returned no data — Supabase may have rejected it silently")
     return {"id": entry_id, "user_id": user_id, "title": title, "content": content,
             "mood": mood, "tags": tag_list, "entry_date": ed, "created_at": now, "updated_at": None}
 
