@@ -26,18 +26,39 @@ FALLBACK_MODELS = [
 _MAX_RETRIES = 2
 _RETRY_DELAY = 2
 
+_FREE_MODEL_IDS = set(FALLBACK_MODELS)
 
-def _should_try_next_model(error: Exception) -> bool:
-    """429 (rate limited) or 404 (model deprecated/renamed) — both mean 'skip to next model'."""
+
+def _is_rate_limited(error: Exception) -> bool:
     if isinstance(error, httpx.HTTPStatusError):
-        return error.response.status_code in (404, 429)
+        return error.response.status_code == 429
     msg = str(error).lower()
-    return "429" in msg or "404" in msg or "rate limit" in msg or "not found" in msg
+    return "429" in msg or "rate limit" in msg
 
 
 def _is_invalid_model(error: Exception) -> bool:
-    """404 means the model ID itself is bad — no point retrying the same model."""
-    return isinstance(error, httpx.HTTPStatusError) and error.response.status_code == 404
+    """404 means the model ID itself is bad — no point retrying."""
+    if isinstance(error, httpx.HTTPStatusError):
+        return error.response.status_code == 404
+    msg = str(error).lower()
+    return "404" in msg or "not found" in msg
+
+
+def _should_try_next_model(error: Exception) -> bool:
+    return _is_rate_limited(error) or _is_invalid_model(error)
+
+
+def _rate_limit_message(model: str, is_custom: bool) -> str:
+    if is_custom:
+        short = model.split("/")[-1]
+        return (
+            f"**{short}** has hit its rate limit. "
+            "Try again in a moment, or switch to a different model in Settings."
+        )
+    return (
+        "All OpenRouter free models are currently rate-limited. "
+        "Try again in a minute, or switch to a different provider in Settings."
+    )
 
 
 class OpenRouterClient:
@@ -45,6 +66,8 @@ class OpenRouterClient:
         self.api_key = api_key
         self.model = model or _DEFAULT_MODEL
         self.timeout = timeout or _DEFAULT_TIMEOUT
+        # True when the user explicitly picked a non-free model via Settings
+        self._is_custom_model = self.model not in _FREE_MODEL_IDS
 
     def _headers(self) -> dict:
         return {
@@ -61,8 +84,11 @@ class OpenRouterClient:
             msgs.insert(0, {"role": "system", "content": sys_content})
         return msgs
 
-    def _models_to_try(self, model: str | None) -> list[str]:
-        primary = model or self.model
+    def _models_to_try(self, call_model: str | None) -> list[str]:
+        primary = call_model or self.model
+        # Custom (non-free) models: only try the one model — no silent fallback.
+        if primary not in _FREE_MODEL_IDS:
+            return [primary]
         rest = [m for m in FALLBACK_MODELS if m != primary]
         return [primary] + rest
 
@@ -80,8 +106,11 @@ class OpenRouterClient:
         if format == "json":
             payload["response_format"] = {"type": "json_object"}
 
+        models = self._models_to_try(model)
+        is_custom = len(models) == 1 and models[0] not in _FREE_MODEL_IDS
         last_error = None
-        for m in self._models_to_try(model):
+
+        for m in models:
             for attempt in range(_MAX_RETRIES):
                 try:
                     with httpx.Client(timeout=self.timeout) as client:
@@ -96,16 +125,19 @@ class OpenRouterClient:
                     last_error = e
                     if _is_invalid_model(e):
                         logger.warning(f"OpenRouter model '{m}' not found (404) — likely deprecated/renamed, trying next model")
-                        break  # no point retrying a nonexistent model
-                    if _should_try_next_model(e):
-                        logger.warning(f"OpenRouter {m} rate-limited (attempt {attempt+1}): {e}")
+                        break
+                    if _is_rate_limited(e):
+                        logger.warning(f"OpenRouter {m} rate-limited (attempt {attempt+1})")
+                        if is_custom:
+                            raise RuntimeError(_rate_limit_message(m, is_custom=True)) from e
                         if attempt < _MAX_RETRIES - 1:
                             time.sleep(_RETRY_DELAY)
                         continue
                     raise
             else:
                 logger.warning(f"OpenRouter {m} exhausted retries, trying next model")
-        raise last_error
+
+        raise RuntimeError(_rate_limit_message(models[0], is_custom=is_custom)) from last_error
 
     def generate(self, prompt: str, model: str | None = None, system: str | None = None) -> str:
         return self.chat([{"role": "user", "content": prompt}], model=model, system=system)
@@ -125,8 +157,11 @@ class OpenRouterClient:
         if format == "json":
             payload["response_format"] = {"type": "json_object"}
 
+        models = self._models_to_try(model)
+        is_custom = len(models) == 1 and models[0] not in _FREE_MODEL_IDS
         last_error = None
-        for m in self._models_to_try(model):
+
+        for m in models:
             try:
                 async with httpx.AsyncClient(timeout=httpx.Timeout(self.timeout, connect=10)) as client:
                     async with client.stream(
@@ -151,12 +186,17 @@ class OpenRouterClient:
                 return
             except Exception as e:
                 last_error = e
-                if _should_try_next_model(e):
-                    logger.warning(f"OpenRouter stream {m} rate-limited, trying next model: {e}")
+                if _is_invalid_model(e):
+                    logger.warning(f"OpenRouter model '{m}' not found (404), trying next model")
+                    continue
+                if _is_rate_limited(e):
+                    logger.warning(f"OpenRouter stream {m} rate-limited, trying next model")
+                    if is_custom:
+                        raise RuntimeError(_rate_limit_message(m, is_custom=True)) from e
                     continue
                 raise
-        if last_error:
-            yield f"\n\n[All OpenRouter free models are rate-limited right now. Try again shortly, or switch provider in Settings. Error: {last_error}]"
+
+        raise RuntimeError(_rate_limit_message(models[0], is_custom=is_custom)) from last_error
 
     async def chat_full_async(
         self,
