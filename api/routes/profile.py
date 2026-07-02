@@ -33,10 +33,14 @@ def update_llm_settings(body: UpdateLlmSettingsRequest, user: dict = Depends(get
     if body.llm_provider not in _VALID_LLM_PROVIDERS and body.llm_provider is not None:
         raise HTTPException(400, "Invalid provider. Use one of: gemini, openrouter, ollama")
 
-    # Empty string means "reset to global default"
+    # Empty string means "reset to global default" / "clear saved key"
     provider = body.llm_provider or None
     model = body.llm_model or None
-    return user_repo.update_user(user["id"], llm_provider=provider, llm_model=model)
+    # llm_api_key=None means "don't touch it"; ""  means "clear it"
+    update_kwargs = dict(llm_provider=provider, llm_model=model)
+    if body.llm_api_key is not None:
+        update_kwargs["llm_api_key"] = body.llm_api_key or None
+    return user_repo.update_user(user["id"], **update_kwargs)
 
 
 @router.get("/llm-settings/available")

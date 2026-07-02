@@ -20,3 +20,6 @@ def create_user(email, name, password=None, auth_provider="local", avatar_url=No
 
 def update_user(user_id, **fields):
     return get_backend().user.update_user(user_id, **fields)
+
+def get_user_api_key(user_id):
+    return get_backend().user.get_user_api_key(user_id)

@@ -50,3 +50,4 @@ class ChangePasswordRequest(BaseModel):
 class UpdateLlmSettingsRequest(BaseModel):
     llm_provider: Optional[str] = None  # "gemini" | "openrouter" | "ollama" | None (use global default)
     llm_model: Optional[str] = None
+    llm_api_key: Optional[str] = None   # user's own API key; "" means clear it

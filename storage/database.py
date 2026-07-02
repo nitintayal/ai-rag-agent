@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS users (
     email_verified INTEGER NOT NULL DEFAULT 0,
     llm_provider TEXT,
     llm_model   TEXT,
+    llm_api_key TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

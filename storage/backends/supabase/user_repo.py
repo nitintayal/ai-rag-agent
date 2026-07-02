@@ -49,8 +49,15 @@ def create_user(email: str, name: str, password: str | None = None,
     return _serialize(row)
 
 
+def get_user_api_key(user_id: str) -> Optional[str]:
+    """Returns the raw llm_api_key — internal use only, never expose via API."""
+    sb = get_supabase()
+    result = sb.table("users").select("llm_api_key").eq("id", user_id).execute()
+    return result.data[0].get("llm_api_key") if result.data else None
+
+
 def update_user(user_id: str, **fields) -> Optional[dict]:
-    allowed = {"name", "password", "avatar_url", "email_verified", "llm_provider", "llm_model"}
+    allowed = {"name", "password", "avatar_url", "email_verified", "llm_provider", "llm_model", "llm_api_key"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return get_user(user_id)
@@ -62,4 +69,5 @@ def update_user(user_id: str, **fields) -> Optional[dict]:
 def _serialize(row: dict) -> dict:
     d = dict(row)
     d.pop("password", None)
+    d["has_llm_api_key"] = bool(d.pop("llm_api_key", None))
     return d

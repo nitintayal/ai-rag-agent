@@ -51,8 +51,15 @@ def create_user(email: str, name: str, password: str | None = None,
             "auth_provider": auth_provider, "created_at": now}
 
 
+def get_user_api_key(user_id: str) -> Optional[str]:
+    """Returns the raw llm_api_key — internal use only, never expose via API."""
+    with get_connection() as conn:
+        row = conn.execute("SELECT llm_api_key FROM users WHERE id = ?", (user_id,)).fetchone()
+        return row["llm_api_key"] if row else None
+
+
 def update_user(user_id: str, **fields) -> Optional[dict]:
-    allowed = {"name", "password", "avatar_url", "email_verified", "llm_provider", "llm_model"}
+    allowed = {"name", "password", "avatar_url", "email_verified", "llm_provider", "llm_model", "llm_api_key"}
     set_clauses = []
     values = []
     for key, val in fields.items():
@@ -70,4 +77,5 @@ def update_user(user_id: str, **fields) -> Optional[dict]:
 def _serialize(row) -> dict:
     d = dict(row)
     d.pop("password", None)
+    d["has_llm_api_key"] = bool(d.pop("llm_api_key", None))
     return d

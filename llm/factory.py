@@ -7,28 +7,31 @@ so each user can pick their own model in Settings without redeploying.
 _clients_cache: dict[str, object] = {}
 
 
-def get_llm_client(provider: str | None = None, model: str | None = None):
-    """Get an LLM client. If provider/model are omitted, falls back to global config."""
+def get_llm_client(provider: str | None = None, model: str | None = None, api_key: str | None = None):
+    """Get an LLM client. If provider/model are omitted, falls back to global config.
+    Pass api_key to use a user-supplied key instead of the server default."""
     from configs.config import settings
 
     provider = (provider or settings.LLM_PROVIDER).lower()
-    cache_key = f"{provider}:{model or ''}"
 
-    if cache_key in _clients_cache:
+    # Only cache when using the server's default key — per-user keys must not be shared
+    use_cache = api_key is None
+    cache_key = f"{provider}:{model or ''}"
+    if use_cache and cache_key in _clients_cache:
         return _clients_cache[cache_key]
 
-    if provider == "gemini" and settings.GOOGLE_API_KEY:
+    if provider == "gemini":
+        key = api_key or settings.GOOGLE_API_KEY
+        if not key:
+            return get_llm_client(provider=settings.LLM_PROVIDER, model=model)
         from llm.gemini_client import GeminiClient
-        client = GeminiClient(
-            api_key=settings.GOOGLE_API_KEY,
-            model=model or settings.GEMINI_MODEL,
-        )
-    elif provider == "openrouter" and settings.OPENROUTER_API_KEY:
+        client = GeminiClient(api_key=key, model=model or settings.GEMINI_MODEL)
+    elif provider == "openrouter":
+        key = api_key or settings.OPENROUTER_API_KEY
+        if not key:
+            return get_llm_client(provider=settings.LLM_PROVIDER, model=model)
         from llm.openrouter_client import OpenRouterClient
-        client = OpenRouterClient(
-            api_key=settings.OPENROUTER_API_KEY,
-            model=model or settings.OPENROUTER_MODEL,
-        )
+        client = OpenRouterClient(api_key=key, model=model or settings.OPENROUTER_MODEL)
     elif provider == "ollama":
         from llm.ollama_client import OllamaClient
         client = OllamaClient(
@@ -37,10 +40,10 @@ def get_llm_client(provider: str | None = None, model: str | None = None):
             timeout=settings.OLLAMA_TIMEOUT,
         )
     else:
-        # Unknown/misconfigured provider — fall back to global default provider
         return get_llm_client(provider=settings.LLM_PROVIDER, model=model)
 
-    _clients_cache[cache_key] = client
+    if use_cache:
+        _clients_cache[cache_key] = client
     return client
 
 
@@ -50,7 +53,11 @@ def get_llm_client_for_user(user: dict | None):
         return get_llm_client()
     provider = user.get("llm_provider") or None
     model = user.get("llm_model") or None
-    return get_llm_client(provider=provider, model=model)
+    api_key = None
+    if user.get("has_llm_api_key"):
+        from storage.repositories import user_repo
+        api_key = user_repo.get_user_api_key(user["id"])
+    return get_llm_client(provider=provider, model=model, api_key=api_key)
 
 
 def reset_client():

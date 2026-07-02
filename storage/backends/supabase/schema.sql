@@ -10,12 +10,14 @@ CREATE TABLE IF NOT EXISTS users (
     email_verified  BOOLEAN NOT NULL DEFAULT FALSE,
     llm_provider    TEXT,
     llm_model       TEXT,
+    llm_api_key     TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- If upgrading an existing Supabase project, run this instead:
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS llm_provider TEXT;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS llm_model TEXT;
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS llm_api_key TEXT;
 
 CREATE TABLE IF NOT EXISTS conversations (
     id              TEXT PRIMARY KEY,
