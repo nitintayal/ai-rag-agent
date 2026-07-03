@@ -24,6 +24,24 @@ def _is_quota_exhausted(error: Exception | None) -> bool:
     return "RESOURCE_EXHAUSTED" in err_str or "PerDay" in err_str or "FreeTier" in err_str
 
 
+def _quota_message() -> str:
+    return (
+        "The free Gemini quota for today has been used up. "
+        "It resets daily at midnight Pacific Time (PT).\n\n"
+        "**Options to continue now:**\n"
+        "- Add your own Gemini API key in ⚙️ Settings → AI Model → Your API Key\n"
+        "- Switch to a different provider (OpenRouter has free models with separate limits)\n"
+        "- Wait until tomorrow and try again"
+    )
+
+
+def _rate_limit_message() -> str:
+    return (
+        "Gemini is temporarily rate-limited (too many requests in a short window). "
+        "Wait a minute and try again, or add your own API key in Settings for higher limits."
+    )
+
+
 class GeminiClient:
     def __init__(self, api_key: str, model: str = "gemini-2.5-flash"):
         self.model = model
@@ -60,7 +78,9 @@ class GeminiClient:
                         time.sleep(RETRY_DELAY * (attempt + 1))
                         continue
                     raise
-        raise last_error
+        if _is_quota_exhausted(last_error):
+            raise RuntimeError(_quota_message()) from last_error
+        raise RuntimeError(_rate_limit_message()) from last_error
 
     def chat(
         self,
@@ -131,8 +151,9 @@ class GeminiClient:
                     logger.warning(f"Stream {m} unavailable, trying next: {e}")
                     continue
                 raise
-        if last_error:
-            yield f"\n\n[All Gemini models exhausted their free quota for today. Error: {last_error}]"
+        if _is_quota_exhausted(last_error):
+            raise RuntimeError(_quota_message()) from last_error
+        raise RuntimeError(_rate_limit_message()) from last_error
 
     async def chat_full_async(
         self,

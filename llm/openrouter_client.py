@@ -53,11 +53,18 @@ def _rate_limit_message(model: str, is_custom: bool) -> str:
         short = model.split("/")[-1]
         return (
             f"**{short}** has hit its rate limit. "
-            "Try again in a moment, or switch to a different model in Settings."
+            "OpenRouter free model limits typically reset every minute.\n\n"
+            "**Options:**\n"
+            "- Wait a minute and try again\n"
+            "- Switch to a different model in ⚙️ Settings → AI Model\n"
+            "- Add your own OpenRouter API key in Settings for higher limits"
         )
     return (
-        "All OpenRouter free models are currently rate-limited. "
-        "Try again in a minute, or switch to a different provider in Settings."
+        "All free OpenRouter models are currently rate-limited.\n\n"
+        "**Options:**\n"
+        "- Wait a minute and try again (free limits reset per minute)\n"
+        "- Add your own API key in ⚙️ Settings → AI Model → Your API Key\n"
+        "- Switch to Gemini in Settings (separate free quota)"
     )
 
 
