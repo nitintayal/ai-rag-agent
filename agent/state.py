@@ -15,3 +15,4 @@ class AgentState(TypedDict):
     stream: Optional[bool]
     llm_provider: Optional[str]
     llm_model: Optional[str]
+    llm_api_key: Optional[str]

@@ -18,8 +18,12 @@ _VALID_TOOLS = {"rag", "web", "journal", "task", "memory", "calendar", "direct"}
 
 
 def _get_llm(state: AgentState | None = None):
-    if state and (state.get("llm_provider") or state.get("llm_model")):
-        return get_llm_client(provider=state.get("llm_provider"), model=state.get("llm_model"))
+    if state and (state.get("llm_provider") or state.get("llm_model") or state.get("llm_api_key")):
+        return get_llm_client(
+            provider=state.get("llm_provider"),
+            model=state.get("llm_model"),
+            api_key=state.get("llm_api_key"),
+        )
     return get_llm_client()
 
 

@@ -13,12 +13,22 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _get_user_llm_params(user: dict) -> tuple[str | None, str | None, str | None]:
+    """Return (provider, model, api_key) for this user, fetching raw key from DB if saved."""
+    provider = user.get("llm_provider") or None
+    model = user.get("llm_model") or None
+    api_key = None
+    if user.get("has_llm_api_key"):
+        from storage.repositories import user_repo
+        api_key = user_repo.get_user_api_key(user["id"])
+    return provider, model, api_key
+
+
 @router.post("/chat")
 async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
     conversation_id = req.conversation_id or str(uuid4())
     user_id = user["id"]
-    llm_provider = user.get("llm_provider")
-    llm_model = user.get("llm_model")
+    llm_provider, llm_model, llm_api_key = _get_user_llm_params(user)
 
     # Auto-title new conversations from the first message
     from storage.repositories import conversation_repo
@@ -31,7 +41,7 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
         try:
             async for token in run_agent_stream(
                 req.question, user_id, conversation_id,
-                llm_provider=llm_provider, llm_model=llm_model,
+                llm_provider=llm_provider, llm_model=llm_model, llm_api_key=llm_api_key,
             ):
                 data = json.dumps({"token": token})
                 yield f"data: {data}\n\n"
@@ -49,12 +59,11 @@ async def chat_sync(req: ChatRequest, user: dict = Depends(get_current_user)):
     import asyncio
     conversation_id = req.conversation_id or str(uuid4())
     user_id = user["id"]
-    llm_provider = user.get("llm_provider")
-    llm_model = user.get("llm_model")
+    llm_provider, llm_model, llm_api_key = _get_user_llm_params(user)
     try:
         result = await asyncio.to_thread(
             run_agent, req.question, user_id, conversation_id,
-            llm_provider=llm_provider, llm_model=llm_model,
+            llm_provider=llm_provider, llm_model=llm_model, llm_api_key=llm_api_key,
         )
         return ChatResponse(
             answer=result["answer"],
