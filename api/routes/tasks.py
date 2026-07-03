@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, HTTPException, Depends
 
 from api.schemas.tasks import TaskCreate, TaskUpdate
@@ -5,6 +7,7 @@ from api.dependencies import get_current_user
 from storage.repositories import task_repo
 
 router = APIRouter(prefix="/tasks")
+logger = logging.getLogger(__name__)
 
 
 @router.get("")
@@ -16,8 +19,26 @@ def list_tasks(status: str | None = None, user: dict = Depends(get_current_user)
 def create_task(body: TaskCreate, user: dict = Depends(get_current_user)):
     return task_repo.create_task(
         user_id=user["id"], title=body.title, description=body.description,
-        due_date=body.due_date, priority=body.priority,
+        due_date=body.due_date, priority=body.priority, recurrence=body.recurrence,
     )
+
+
+@router.get("/send-reminders")
+def send_reminders(user: dict = Depends(get_current_user)):
+    """Send due-date reminder emails for this user's overdue/due-today tasks."""
+    from auth.email import send_task_reminder_email
+    tasks = task_repo.get_tasks_due_today(user_id=user["id"])
+    sent = 0
+    for task in tasks:
+        try:
+            email = user.get("email") or task.get("email")
+            name = user.get("name") or task.get("name") or "there"
+            if email and send_task_reminder_email(email, name, [task]):
+                task_repo.mark_reminder_sent(task["id"])
+                sent += 1
+        except Exception as e:
+            logger.error(f"Reminder failed for task {task['id']}: {e}")
+    return {"sent": sent, "total": len(tasks)}
 
 
 @router.get("/{task_id}")

@@ -85,18 +85,23 @@ CREATE INDEX IF NOT EXISTS idx_journal_user
     ON journal_entries(user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS tasks (
-    id          TEXT PRIMARY KEY,
-    user_id     TEXT NOT NULL,
-    title       TEXT NOT NULL,
-    description TEXT,
-    due_date    TEXT,
-    status      TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'in_progress', 'done', 'cancelled')),
-    priority    TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high')),
-    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at  TEXT
+    id              TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL,
+    title           TEXT NOT NULL,
+    description     TEXT,
+    due_date        TEXT,
+    status          TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'in_progress', 'done', 'cancelled')),
+    priority        TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high')),
+    recurrence      TEXT CHECK(recurrence IN ('daily', 'weekly', 'monthly', NULL)),
+    reminder_sent_at TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_user
     ON tasks(user_id, status, due_date);
+-- Migrate existing tables (safe no-op if columns already exist)
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence TEXT;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS reminder_sent_at TEXT;
 
 CREATE TABLE IF NOT EXISTS user_memories (
     id          TEXT PRIMARY KEY,
@@ -132,8 +137,15 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     start_time  TEXT NOT NULL,
     end_time    TEXT,
     all_day     INTEGER NOT NULL DEFAULT 0,
-    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    location    TEXT,
+    recurrence  TEXT CHECK(recurrence IN ('daily', 'weekly', 'monthly', NULL)),
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_calendar_user
     ON calendar_events(user_id, start_time);
+-- Migrate existing tables
+ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS location TEXT;
+ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS recurrence TEXT;
+ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS updated_at TEXT;
 """

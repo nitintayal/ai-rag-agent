@@ -7,6 +7,7 @@ class TaskCreate(BaseModel):
     description: Optional[str] = None
     due_date: Optional[str] = None
     priority: str = Field(default="medium")
+    recurrence: Optional[str] = None  # "daily" | "weekly" | "monthly"
 
 
 class TaskUpdate(BaseModel):
@@ -15,3 +16,4 @@ class TaskUpdate(BaseModel):
     due_date: Optional[str] = None
     status: Optional[str] = None
     priority: Optional[str] = None
+    recurrence: Optional[str] = None

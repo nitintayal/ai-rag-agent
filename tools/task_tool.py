@@ -13,12 +13,13 @@ class TaskTool(BaseTool):
     def execute(self, user_id: str, action: str = "list", title: str = "",
                 description: str | None = None, due_date: str | None = None,
                 priority: str = "medium", task_id: str | None = None,
-                status: str | None = None, **kwargs) -> ToolResult:
+                status: str | None = None, recurrence: str | None = None,
+                **kwargs) -> ToolResult:
         try:
             if action == "create" and title:
                 task = task_repo.create_task(
                     user_id=user_id, title=title, description=description,
-                    due_date=due_date, priority=priority,
+                    due_date=due_date, priority=priority, recurrence=recurrence,
                 )
                 return ToolResult(
                     context=f"Task created: '{task['title']}' (priority: {task['priority']}, due: {task['due_date'] or 'no deadline'})",

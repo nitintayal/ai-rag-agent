@@ -53,6 +53,57 @@ def send_verification_email(to_email: str, code: str, frontend_url: str = "") ->
         return False
 
 
+def send_task_reminder_email(to_email: str, name: str, tasks: list) -> bool:
+    resend = _get_client()
+    if not resend:
+        logger.warning(f"No RESEND_API_KEY — skipping reminder for {to_email}")
+        return False
+
+    from configs.config import settings
+
+    def _task_row(t):
+        due = t.get("due_date", "")
+        overdue = due and due < __import__("datetime").date.today().isoformat()
+        label = f'<span style="color:{"#dc2626" if overdue else "#d97706"};font-weight:600;">{"⚠ Overdue" if overdue else "Due today"}</span>'
+        return f"""
+        <tr>
+          <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;">
+            <strong style="color:#0f172a;">{t.get("title","")}</strong><br>
+            <span style="font-size:13px;color:#64748b;">{label} · {due} · {t.get("priority","medium")} priority</span>
+          </td>
+        </tr>"""
+
+    rows = "".join(_task_row(t) for t in tasks)
+    try:
+        resend.Emails.send({
+            "from": f"{APP_NAME} <{settings.RESEND_FROM_EMAIL}>",
+            "to": to_email,
+            "subject": f"📋 {len(tasks)} task{'s' if len(tasks) != 1 else ''} due today — {APP_NAME}",
+            "html": f"""
+            <div style="font-family:-apple-system,sans-serif;max-width:520px;margin:0 auto;padding:40px 20px;">
+              <h2 style="color:#0f172a;margin-bottom:4px;">Hi {name},</h2>
+              <p style="color:#475569;line-height:1.6;margin-top:8px;">
+                You have <strong>{len(tasks)}</strong> task{'s' if len(tasks) != 1 else ''} due today or overdue.
+              </p>
+              <table style="width:100%;border-collapse:collapse;margin:20px 0;">
+                {rows}
+              </table>
+              <a href="{settings.FRONTEND_URL}" style="display:inline-block;background:#0f172a;color:white;
+                 padding:12px 24px;border-radius:8px;text-decoration:none;margin-top:8px;">
+                Open Task Manager
+              </a>
+              <p style="color:#cbd5e1;font-size:12px;margin-top:32px;">
+                You're receiving this because you have tasks due in {APP_NAME}.
+              </p>
+            </div>""",
+        })
+        logger.info(f"Task reminder sent to {to_email} ({len(tasks)} tasks)")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send task reminder: {e}")
+        return False
+
+
 def send_password_reset_email(to_email: str, code: str, frontend_url: str = "") -> bool:
     resend = _get_client()
     if not resend:
