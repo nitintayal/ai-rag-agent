@@ -19,6 +19,8 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting AI Personal Assistant...")
     logger.info(f"LLM Provider: {settings.LLM_PROVIDER}")
     logger.info(f"DB Backend: {settings.DB_BACKEND}")
+    if settings.JWT_SECRET == "change-me-in-production" or len(settings.JWT_SECRET) < 32:
+        logger.critical("JWT_SECRET is too short or using the default — set a 32+ char secret in env vars or all auth will fail with 401")
     get_backend()
     logger.info("Storage backend initialized")
     yield
