@@ -100,6 +100,13 @@ class Settings(BaseSettings):
     REQUIRE_EMAIL_VERIFICATION: bool = False
 
     # =========================
+    # Push Notifications (Web Push / VAPID)
+    # =========================
+    VAPID_PRIVATE_KEY: Optional[str] = None   # base64url-encoded EC private key
+    VAPID_PUBLIC_KEY: Optional[str] = None    # base64url-encoded EC public key
+    VAPID_CLAIMS_EMAIL: str = "mailto:admin@example.com"
+
+    # =========================
     # Debug
     # =========================
     DEBUG: bool = False

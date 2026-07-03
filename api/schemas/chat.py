@@ -12,3 +12,4 @@ class ChatResponse(BaseModel):
     answer: str
     sources: list[str] = []
     tool: str = "direct"
+    conversation_id: Optional[str] = None

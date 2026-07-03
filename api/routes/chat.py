@@ -69,6 +69,7 @@ async def chat_sync(req: ChatRequest, user: dict = Depends(get_current_user)):
             answer=result["answer"],
             sources=result.get("sources", []),
             tool=result.get("tool", "direct"),
+            conversation_id=conversation_id,
         )
     except Exception as e:
         logger.error(f"Chat sync error: {e}", exc_info=True)

@@ -25,15 +25,30 @@ def create_task(body: TaskCreate, user: dict = Depends(get_current_user)):
 
 @router.get("/send-reminders")
 def send_reminders(user: dict = Depends(get_current_user)):
-    """Send due-date reminder emails for this user's overdue/due-today tasks."""
+    """Send due-date reminder emails + push notifications for this user's due/overdue tasks."""
     from auth.email import send_task_reminder_email
+    from api.routes.push import send_push_notification
+    from storage.repositories import push_repo
     tasks = task_repo.get_tasks_due_today(user_id=user["id"])
     sent = 0
+    push_subs = push_repo.get_subscriptions_for_user(user["id"])
     for task in tasks:
         try:
+            reminded = False
             email = user.get("email") or task.get("email")
             name = user.get("name") or task.get("name") or "there"
             if email and send_task_reminder_email(email, name, [task]):
+                reminded = True
+            payload = {
+                "title": "Task Due",
+                "body": task.get("title", "You have a task due today"),
+                "tag": f"task-{task['id']}",
+                "url": "/",
+            }
+            for sub in push_subs:
+                if send_push_notification(sub["endpoint"], sub["p256dh"], sub["auth"], payload):
+                    reminded = True
+            if reminded:
                 task_repo.mark_reminder_sent(task["id"])
                 sent += 1
         except Exception as e:

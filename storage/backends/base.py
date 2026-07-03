@@ -135,7 +135,7 @@ class BaseCalendarRepo(ABC):
 
 class StorageBackend:
     """Container for all repository implementations of a backend."""
-    def __init__(self, user, conversation, journal, task, memory, verification=None, calendar=None):
+    def __init__(self, user, conversation, journal, task, memory, verification=None, calendar=None, push=None):
         self.user = user
         self.conversation = conversation
         self.journal = journal
@@ -143,3 +143,4 @@ class StorageBackend:
         self.memory = memory
         self.verification = verification
         self.calendar = calendar
+        self.push = push
