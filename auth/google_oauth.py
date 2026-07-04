@@ -24,10 +24,21 @@ async def verify_google_token(id_token: str, client_id: str) -> dict | None:
         if not data.get("email_verified", "false") == "true":
             return None
 
+        email = data["email"]
+
+        # Build display name: prefer full name, then given+family, then email prefix
+        name = data.get("name", "").strip()
+        if not name or name == email:
+            given = data.get("given_name", "").strip()
+            family = data.get("family_name", "").strip()
+            name = f"{given} {family}".strip()
+        if not name or name == email:
+            name = email.split("@")[0]
+
         return {
             "sub": data["sub"],
-            "email": data["email"],
-            "name": data.get("name", ""),
+            "email": email,
+            "name": name,
             "picture": data.get("picture", ""),
         }
     except Exception:
