@@ -9,6 +9,8 @@ Be concise and helpful. When you use information given to you, cite your sources
 
 ROUTER_PROMPT = """Decide which tool(s) to use and extract parameters. Respond with ONLY a JSON object.
 
+{date_context}
+
 Available tools:
 - "rag": Search the user's uploaded documents/knowledge base. Args: {{"query": "search query"}}
 - "web": Search the web for current/recent information. Args: {{"query": "search query"}}

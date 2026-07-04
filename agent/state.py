@@ -16,3 +16,4 @@ class AgentState(TypedDict):
     llm_provider: Optional[str]
     llm_model: Optional[str]
     llm_api_key: Optional[str]
+    user_timezone: Optional[str]

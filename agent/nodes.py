@@ -50,7 +50,16 @@ def route(state: AgentState) -> dict:
     llm = _get_llm(state)
 
     try:
-        prompt = ROUTER_PROMPT.format(question=question)
+        from datetime import datetime
+        import zoneinfo
+        tz_name = state.get("user_timezone") or "UTC"
+        try:
+            tz = zoneinfo.ZoneInfo(tz_name)
+        except Exception:
+            tz = zoneinfo.ZoneInfo("UTC")
+        now = datetime.now(tz)
+        date_ctx = f"Current date/time: {now.strftime('%Y-%m-%d %H:%M')} ({tz_name}). Today is {now.strftime('%A, %B %d, %Y')}."
+        prompt = ROUTER_PROMPT.format(question=question, date_context=date_ctx)
         result = llm.chat(
             [{"role": "user", "content": prompt}],
             system="You are a router that picks the right tool(s) and extracts parameters. Respond only with valid JSON.",

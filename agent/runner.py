@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 def _empty_state(question, user_id, conversation_id, stream=False,
-                 llm_provider=None, llm_model=None, llm_api_key=None) -> AgentState:
+                 llm_provider=None, llm_model=None, llm_api_key=None,
+                 user_timezone=None) -> AgentState:
     return {
         "question": question,
         "user_id": user_id,
@@ -33,14 +34,16 @@ def _empty_state(question, user_id, conversation_id, stream=False,
         "llm_provider": llm_provider,
         "llm_model": llm_model,
         "llm_api_key": llm_api_key,
+        "user_timezone": user_timezone,
     }
 
 
 def run_agent(question: str, user_id: str, conversation_id: str,
              llm_provider: str | None = None, llm_model: str | None = None,
-             llm_api_key: str | None = None) -> dict:
+             llm_api_key: str | None = None, user_timezone: str | None = None) -> dict:
     state = _empty_state(question, user_id, conversation_id,
-                         llm_provider=llm_provider, llm_model=llm_model, llm_api_key=llm_api_key)
+                         llm_provider=llm_provider, llm_model=llm_model, llm_api_key=llm_api_key,
+                         user_timezone=user_timezone)
     result = agent.invoke(state)
     return {
         "answer": result.get("answer", ""),
@@ -51,12 +54,14 @@ def run_agent(question: str, user_id: str, conversation_id: str,
 
 async def run_agent_stream(question: str, user_id: str, conversation_id: str,
                            llm_provider: str | None = None, llm_model: str | None = None,
-                           llm_api_key: str | None = None) -> AsyncIterator[str]:
+                           llm_api_key: str | None = None,
+                           user_timezone: str | None = None) -> AsyncIterator[str]:
     from agent.nodes import route, execute_tool
     from configs.config import settings
 
     state = _empty_state(question, user_id, conversation_id, stream=True,
-                         llm_provider=llm_provider, llm_model=llm_model, llm_api_key=llm_api_key)
+                         llm_provider=llm_provider, llm_model=llm_model, llm_api_key=llm_api_key,
+                         user_timezone=user_timezone)
 
     # Send an immediate heartbeat so the HTTP connection opens right away —
     # otherwise route()/execute_tool() can block for 10-30s (e.g. slow web

@@ -42,6 +42,7 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
             async for token in run_agent_stream(
                 req.question, user_id, conversation_id,
                 llm_provider=llm_provider, llm_model=llm_model, llm_api_key=llm_api_key,
+                user_timezone=req.timezone,
             ):
                 data = json.dumps({"token": token})
                 yield f"data: {data}\n\n"
@@ -64,6 +65,7 @@ async def chat_sync(req: ChatRequest, user: dict = Depends(get_current_user)):
         result = await asyncio.to_thread(
             run_agent, req.question, user_id, conversation_id,
             llm_provider=llm_provider, llm_model=llm_model, llm_api_key=llm_api_key,
+            user_timezone=req.timezone,
         )
         return ChatResponse(
             answer=result["answer"],
