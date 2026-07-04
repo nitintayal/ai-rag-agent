@@ -7,16 +7,17 @@ User (browser/mobile)
   │
   ├── React Frontend (Vercel)
   │     ├── Auth (JWT in localStorage)
-  │     ├── SSE streaming chat
-  │     ├── Tasks / Journal / Settings panels
-  │     └── Dark mode + Voice input + PWA
+  │     ├── SSE streaming chat (Safari fallback to /chat/sync)
+  │     ├── Tasks / Journal / Calendar / Settings panels
+  │     └── Dark mode + Voice input + PWA (service worker, push, pull-to-refresh)
   │
   └── FastAPI Backend (Render)
         ├── Auth Layer (JWT + Google OAuth + Resend)
-        ├── Agent Layer (LangGraph)
-        ├── LLM Layer (Gemini / OpenRouter / Ollama, per-user selectable)
+        ├── Agent Layer (LangGraph, timezone-aware routing)
+        ├── LLM Layer (Gemini / OpenRouter / Ollama, per-user provider/model/API key)
         ├── Tool Layer (6 tools)
         ├── Memory Layer (conversation + long-term)
+        ├── Push Layer (Web Push via VAPID, task reminders)
         └── Storage Layer (SQLite / Supabase)
 ```
 
@@ -25,8 +26,9 @@ User (browser/mobile)
 ## Request Lifecycle: Chat Message
 
 ```
-1. Frontend sends POST /chat with {question, conversation_id}
+1. Frontend sends POST /chat with {question, conversation_id, timezone}
    └── Authorization: Bearer <jwt>
+   └── timezone (IANA name from the browser) feeds date context in the routing prompt
 
 2. api/routes/chat.py
    ├── Extracts user from JWT
@@ -169,10 +171,13 @@ All three implement the same interface:
   .generate(prompt, ...) → str
   .chat_full_async(messages, ...) → str
 
-Per-user overrides: PATCH /auth/llm-settings sets users.llm_provider / users.llm_model.
-agent/state.py::AgentState carries llm_provider/llm_model through every node that calls
-the LLM (route, generate, extract_memory) via agent/nodes.py::_get_llm(state).
-If the user's chosen provider has no API key configured, falls back to the global default.
+Per-user overrides: PATCH /auth/llm-settings sets users.llm_provider / users.llm_model /
+users.llm_api_key (personal key; empty string clears it). get_llm_client_for_user() loads
+the personal key only when user["has_llm_api_key"] is set, and clients built with a user
+key bypass the client cache. agent/state.py::AgentState carries llm_provider/llm_model
+through every node that calls the LLM (route, generate, extract_memory) via
+agent/nodes.py::_get_llm(state). If the user's chosen provider has no API key configured
+(neither personal nor server), falls back to the global default.
 ```
 
 ---
@@ -258,12 +263,19 @@ Routing: No React Router — view switching via activeView state
   "chat" → ChatWindow
   "tasks" → TasksPanel
   "journal" → JournalPanel
+  "calendar" → CalendarPanel
   "settings" → SettingsPanel
 
 SSE Streaming:
   fetch("/chat", {method: "POST"})
   → ReadableStream → parse "data: {token}" lines
   → Update message state incrementally
+  Safari/iOS: falls back to non-streaming POST /chat/sync
+
+PWA:
+  public/sw.js — network-first caching + push notification display/click handling
+  usePushNotifications hook — subscribe via /push/vapid-public-key + /push/subscribe
+  usePullToRefresh hook — mobile pull-to-refresh gesture
 
 Auth Flow:
   localStorage: token + user (JSON)
