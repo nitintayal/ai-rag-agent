@@ -69,7 +69,7 @@ async def chat_sync(req: ChatRequest, user: dict = Depends(get_current_user)):
         )
         return ChatResponse(
             answer=result["answer"],
-            sources=result.get("sources", []),
+            sources=result.get("sources") or [],
             tool=result.get("tool", "direct"),
             conversation_id=conversation_id,
         )

@@ -47,7 +47,7 @@ def run_agent(question: str, user_id: str, conversation_id: str,
     result = agent.invoke(state)
     return {
         "answer": result.get("answer", ""),
-        "sources": result.get("sources", []),
+        "sources": result.get("sources") or [],
         "tool": result.get("tool", "direct"),
     }
 
