@@ -14,7 +14,7 @@ def _hf_default_path(local_path: str, data_path: str) -> str:
 class Settings(BaseSettings):
 
     # =========================
-    # LLM Provider: "gemini", "openrouter", or "ollama"
+    # LLM Provider: "gemini", "openrouter", "ollama", or "anthropic"
     # =========================
     LLM_PROVIDER: str = "gemini"
     GOOGLE_API_KEY: Optional[str] = None
@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_CHAT_MODEL: str = "qwen2.5:7b"
     OLLAMA_TIMEOUT: int = 120
+
+    # =========================
+    # Anthropic (when LLM_PROVIDER=anthropic)
+    # =========================
+    ANTHROPIC_API_KEY: Optional[str] = None
+    ANTHROPIC_MODEL: str = "claude-haiku-4-5"
 
     # =========================
     # Embeddings & Reranking

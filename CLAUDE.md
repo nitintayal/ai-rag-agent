@@ -25,7 +25,7 @@ Frontend: `cd ../ai-rag-ui && npm run dev`
 api/          → FastAPI routes (incl. calendar + push), auth dependencies, schemas
 auth/         → JWT, bcrypt, Google OAuth, Resend email (verification, reset, task reminders)
 agent/        → LangGraph graph (route → execute_tool(s) → generate → extract_memory)
-llm/          → factory.py picks Gemini, OpenRouter, or Ollama — per-user provider/model/API-key override
+llm/          → factory.py picks Gemini, OpenRouter, Ollama, or Anthropic — per-user provider/model/API-key override
 tools/        → 6 tools with BaseTool interface (rag, web, journal, task, memory, calendar)
 memory/       → conversation history + long-term user facts + context builder
 storage/      → plug-and-play DB: factory.py → backends/sqlite/ or backends/supabase/
@@ -36,7 +36,7 @@ rag/          → FAISS + BM25 hybrid search, embeddings, reranking, ingestion (
 
 - **Storage dispatchers**: `storage/repositories/*.py` are thin functions that delegate to `storage/factory.get_backend()`. Never put SQL in a repository file — put it in the backend implementation (`storage/backends/sqlite/` or `storage/backends/supabase/`).
 - **Lazy ML imports**: `sentence_transformers`, `torch`, `faiss` are imported inside functions, never at module level. Cloud deployment (`requirements-cloud.txt`) doesn't have these — use `storage/backends/embedding_utils.safe_embed()` for any embedding call that must degrade gracefully.
-- **LLM factory**: `llm/factory.get_llm_client(provider=None, model=None, api_key=None)` returns `GeminiClient`, `OpenRouterClient`, or `OllamaClient`. All three share the same interface: `.chat()`, `.chat_stream()`, `.generate()`. Per-user overrides are read from `user["llm_provider"]` / `user["llm_model"]` plus an optional personal API key (`users.llm_api_key`, fetched only when `has_llm_api_key` is set; set via `PATCH /auth/llm-settings`, empty string clears it) and threaded through `AgentState` → every node that calls the LLM. Clients built with a user API key are not cached.
+- **LLM factory**: `llm/factory.get_llm_client(provider=None, model=None, api_key=None)` returns `GeminiClient`, `OpenRouterClient`, `OllamaClient`, or `AnthropicClient`. All four share the same interface: `.chat()`, `.chat_stream()`, `.generate()`, `.chat_full_async()`. Per-user overrides are read from `user["llm_provider"]` / `user["llm_model"]` plus an optional personal API key (`users.llm_api_key`, fetched only when `has_llm_api_key` is set; set via `PATCH /auth/llm-settings`, empty string clears it) and threaded through `AgentState` → every node that calls the LLM. Clients built with a user API key are not cached.
 - **Multi-tool routing**: `agent/nodes.py::route()` makes a single LLM call that returns `{"tools": [{"tool": ..., "args": {...}}, ...]}` — supports calling multiple tools in one turn. Falls back to keyword matching (`_keyword_fallback_route`) if the LLM call fails.
 - **Web search providers**: `tools/web_tool.py` dispatches to `tools/web_search/ddgs_search.py` (free, scraping-based) or `tools/web_search/tavily_search.py` (API key, faster/cleaner) based on `WEB_SEARCH_PROVIDER`.
 - **Auth**: All data routes use `Depends(get_current_user)` from `api/dependencies.py`. `api/routes/auth.py` holds the public "get a token" flows (register, login, Google OAuth, password reset). `api/routes/profile.py` holds the authenticated "manage my account" flows (profile, password change, LLM settings) — both share the `/auth` URL prefix, split purely for file size. Shared rate-limiting (`auth/rate_limit.py`) and verification codes (`auth/verification.py`) live in the `auth/` package.
@@ -87,7 +87,7 @@ print(f'{len(app.routes)} routes OK')
 
 ## Environment Variables
 
-Critical ones: `LLM_PROVIDER` (gemini/openrouter/ollama), `DB_BACKEND` (sqlite/supabase), `JWT_SECRET`, `GOOGLE_API_KEY` (if gemini), `OPENROUTER_API_KEY` (if openrouter), `SUPABASE_URL` + `SUPABASE_KEY` (if supabase), `WEB_SEARCH_PROVIDER` (ddgs/tavily), `TAVILY_API_KEY` (if tavily), `CORS_ORIGINS`, `VAPID_PRIVATE_KEY` + `VAPID_PUBLIC_KEY` (for Web Push; optional). See `.env.example` for all.
+Critical ones: `LLM_PROVIDER` (gemini/openrouter/ollama/anthropic), `DB_BACKEND` (sqlite/supabase), `JWT_SECRET`, `GOOGLE_API_KEY` (if gemini), `OPENROUTER_API_KEY` (if openrouter), `ANTHROPIC_API_KEY` (if anthropic), `SUPABASE_URL` + `SUPABASE_KEY` (if supabase), `WEB_SEARCH_PROVIDER` (ddgs/tavily), `TAVILY_API_KEY` (if tavily), `CORS_ORIGINS`, `VAPID_PRIVATE_KEY` + `VAPID_PUBLIC_KEY` (for Web Push; optional). See `.env.example` for all.
 
 ## Schema Migrations
 

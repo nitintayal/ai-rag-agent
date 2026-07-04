@@ -39,6 +39,12 @@ def get_llm_client(provider: str | None = None, model: str | None = None, api_ke
             model=model or settings.OLLAMA_CHAT_MODEL,
             timeout=settings.OLLAMA_TIMEOUT,
         )
+    elif provider == "anthropic":
+        key = api_key or settings.ANTHROPIC_API_KEY
+        if not key:
+            return get_llm_client(provider=settings.LLM_PROVIDER, model=model)
+        from llm.anthropic_client import AnthropicClient
+        client = AnthropicClient(api_key=key, model=model or settings.ANTHROPIC_MODEL)
     else:
         return get_llm_client(provider=settings.LLM_PROVIDER, model=model)
 
@@ -73,11 +79,13 @@ def _get_available_models() -> dict[str, list[str]]:
     from llm.gemini_client import FALLBACK_MODELS as gemini_models
     from llm.openrouter_client import FALLBACK_MODELS as openrouter_models
     from llm.ollama_client import KNOWN_MODELS as ollama_models
+    from llm.anthropic_client import KNOWN_MODELS as anthropic_models
 
     return {
         "gemini": gemini_models,
         "openrouter": openrouter_models,
         "ollama": ollama_models,
+        "anthropic": anthropic_models,
     }
 
 

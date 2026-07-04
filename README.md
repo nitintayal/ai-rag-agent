@@ -1,8 +1,26 @@
 # AI Personal Assistant
 
-A full-stack AI personal assistant with chat, RAG document search, web search, journal, task management, persistent memory, calendar, and authentication — deployable locally with Ollama or in the cloud with Gemini + Supabase.
+**AI Personal assistant**
+
+Use Gemini or OpenRouter free tiers in the cloud, or run Ollama entirely on your own machine. Either way, zero subscription fees and no third-party data access.
+
+A full-stack AI personal assistant with chat, search your documents, manage tasks, keep a journal, track your calendar, and build persistent memory — all in one self-hostable app.
 
 **Live Demo:** [iassistant.in](https://iassistant.in)
+
+<!-- Replace the line below with your GIF path or GitHub video URL once recorded -->
+![Demo — streaming chat and multi-tool call](demo.gif)
+
+## Free Hosting Stack (everything has a free tier)
+
+| Layer | Free option |
+|-------|-------------|
+| LLM | [Gemini 2.5 Flash](https://ai.google.dev) free tier · [OpenRouter](https://openrouter.ai) free models · [Ollama](https://ollama.com) local |
+| Backend | [Render](https://render.com) free web service |
+| Frontend | [Vercel](https://vercel.com) free tier |
+| Database | [Supabase](https://supabase.com) free tier · SQLite locally |
+| Web search | DuckDuckGo (no key needed) |
+| Email | [Resend](https://resend.com) free tier (optional) |
 
 ## Features
 
@@ -75,7 +93,7 @@ API Layer  →  Auth Layer
 | **API** | FastAPI endpoints, SSE streaming, request schemas | `api/app.py`, `api/routes/` |
 | **Auth** | JWT tokens, password hashing, Google OAuth, email verification | `auth/`, `api/routes/auth.py`, `api/routes/profile.py` |
 | **Agent** | LangGraph graph, multi-tool orchestration, sync + streaming | `agent/graph.py`, `agent/nodes.py`, `agent/runner.py` |
-| **LLM** | Gemini / OpenRouter / Ollama clients with retry + fallback, per-user provider/model/API-key overrides | `llm/factory.py`, `llm/gemini_client.py`, `llm/openrouter_client.py`, `llm/ollama_client.py` |
+| **LLM** | Gemini / OpenRouter / Ollama / Anthropic clients with retry + fallback, per-user provider/model/API-key overrides | `llm/factory.py`, `llm/gemini_client.py`, `llm/openrouter_client.py`, `llm/ollama_client.py`, `llm/anthropic_client.py` |
 | **Tools** | 6 tools with uniform `BaseTool` interface and registry | `tools/base.py`, `tools/registry.py`, `tools/*.py` |
 | **Memory** | Conversation history + long-term user facts + context builder | `memory/` |
 | **RAG** | FAISS + BM25 hybrid search, cross-encoder reranking, ingestion | `rag/` |
@@ -117,9 +135,10 @@ Switch between local and cloud LLMs via a global default, or let each user pick 
 LLM_PROVIDER=gemini       # Google Gemini API (cloud, free tier)
 LLM_PROVIDER=openrouter   # OpenRouter — access to multiple free models via one key
 LLM_PROVIDER=ollama       # Local Ollama (requires 8GB+ RAM)
+LLM_PROVIDER=anthropic    # Anthropic Claude (paid per token, requires ANTHROPIC_API_KEY)
 ```
 
-Both Gemini and OpenRouter clients include retry + automatic fallback across multiple models if the primary one is rate-limited or unavailable (Gemini: 2.5-flash → 2.0-flash → 2.0-flash-lite; OpenRouter: rotates across several free `:free` models). Per-user overrides are stored on the `users` table (`llm_provider`, `llm_model`, `llm_api_key`) and set via `PATCH /auth/llm-settings` — the agent resolves the user's choice (and personal API key, if saved) first, falling back to the global default if their provider isn't configured.
+Gemini and OpenRouter clients include retry + automatic fallback across multiple models if the primary one is rate-limited or unavailable (Gemini: 2.5-flash → 2.0-flash → 2.0-flash-lite; OpenRouter: rotates across several free `:free` models). The Anthropic client uses Claude Haiku 4.5 (cheapest Claude model). Per-user overrides are stored on the `users` table (`llm_provider`, `llm_model`, `llm_api_key`) and set via `PATCH /auth/llm-settings` — the agent resolves the user's choice (and personal API key, if saved) first, falling back to the global default if their provider isn't configured.
 
 ### Web Search Provider
 
@@ -258,7 +277,7 @@ python -m api.app
 2. Create Render Web Service → connect repo
 3. Build: `pip install -r requirements-cloud.txt`
 4. Start: `python start.py`
-5. Set env vars: `LLM_PROVIDER=gemini` (or `openrouter`), `GOOGLE_API_KEY` (or `OPENROUTER_API_KEY`), `DB_BACKEND=supabase`, `SUPABASE_URL`, `SUPABASE_KEY`, `JWT_SECRET`, `CORS_ORIGINS`
+5. Set env vars: `LLM_PROVIDER=gemini` (or `openrouter`/`anthropic`), `GOOGLE_API_KEY` (or `OPENROUTER_API_KEY`/`ANTHROPIC_API_KEY`), `DB_BACKEND=supabase`, `SUPABASE_URL`, `SUPABASE_KEY`, `JWT_SECRET`, `CORS_ORIGINS`
 
 **Frontend (Vercel):**
 1. Push `ai-rag-ui` to GitHub
@@ -283,13 +302,15 @@ npm run dev
 | Variable | Default | Description |
 |----------|---------|-------------|
 | **LLM** | | |
-| `LLM_PROVIDER` | `gemini` | `gemini`, `openrouter`, or `ollama` — global default (users can override in Settings) |
+| `LLM_PROVIDER` | `gemini` | `gemini`, `openrouter`, `ollama`, or `anthropic` — global default (users can override in Settings) |
 | `GOOGLE_API_KEY` | — | Gemini API key (when provider=gemini) |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model name |
 | `OPENROUTER_API_KEY` | — | OpenRouter API key (when provider=openrouter) |
 | `OPENROUTER_MODEL` | `meta-llama/llama-3.3-70b-instruct:free` | OpenRouter model name |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `OLLAMA_CHAT_MODEL` | `qwen2.5:7b` | Ollama model name |
+| `ANTHROPIC_API_KEY` | — | Anthropic API key (when provider=anthropic) |
+| `ANTHROPIC_MODEL` | `claude-haiku-4-5` | Anthropic model name |
 | **Database** | | |
 | `DB_BACKEND` | `sqlite` | `sqlite` or `supabase` |
 | `DATABASE_PATH` | `data/db/assistant.db` | SQLite file path |
