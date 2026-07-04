@@ -46,7 +46,8 @@ def create_user(email: str, name: str, password: str | None = None,
         "email_verified": False, "created_at": now,
     }
     sb.table("users").insert(row).execute()
-    return _serialize(row)
+    # Fetch from DB so returned shape matches get_user() (has_llm_api_key, db defaults, etc.)
+    return get_user(user_id) or _serialize(row)
 
 
 def get_user_api_key(user_id: str) -> Optional[str]:

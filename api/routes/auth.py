@@ -118,17 +118,16 @@ async def google_auth(body: GoogleAuthRequest):
     try:
         existing = user_repo.get_user_by_email(google_user["email"])
         if existing:
-            if not existing.get("email_verified"):
-                user_repo.update_user(existing["id"], email_verified=True)
-            user = user_repo.get_user_by_email(google_user["email"])
+            # update_user returns the updated user — no need to re-fetch
+            user = user_repo.update_user(existing["id"], email_verified=True)
         else:
-            user = user_repo.create_user(
+            created = user_repo.create_user(
                 email=google_user["email"],
                 name=google_user["name"],
                 auth_provider="google",
                 avatar_url=google_user.get("picture"),
             )
-            user = user_repo.update_user(user["id"], email_verified=True)
+            user = user_repo.update_user(created["id"], email_verified=True)
     except Exception as e:
         logger.error(f"Google auth user creation failed: {e}", exc_info=True)
         raise HTTPException(500, "Google sign-in failed — please try again")
