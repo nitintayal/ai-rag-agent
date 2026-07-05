@@ -53,7 +53,8 @@ def available_llm_settings():
         "providers_configured": {
             "gemini": bool(settings.GOOGLE_API_KEY),
             "openrouter": bool(settings.OPENROUTER_API_KEY),
-            "ollama": True,  # always shown as an option; actual availability depends on local server
+            "ollama": True,
+            "anthropic": bool(settings.ANTHROPIC_API_KEY),
         },
     }
 
