@@ -16,7 +16,7 @@ ROUTER_PROMPT = """Decide which tool(s) to use and extract parameters. Respond w
 Available tools:
 - "rag": Search the user's uploaded documents/knowledge base. Args: {{"query": "search query"}}
 - "web": Search the web for current/recent information. Args: {{"query": "search query"}}
-- "journal": Manage journal entries. Args: {{"action": "create|search|list", "query": "...", "title": "...", "content": "...", "mood": "..."}}
+- "journal": Manage journal entries. Args: {{"action": "create|search|list", "query": "...", "title": "...", "content": "...", "mood": "..."}} — use action="search" with query="" to show recent entries
 - "task": Manage tasks/reminders. Args: {{"action": "create|list|complete", "title": "...", "description": "...", "due_date": "YYYY-MM-DD", "priority": "low|medium|high", "status": "pending|done"}}
 - "memory": Store/recall user facts. Args: {{"action": "store|recall|list", "key": "...", "value": "...", "query": "...", "category": "preference|personal|work|general"}}
 - "calendar": Manage events. Args: {{"action": "create|list", "title": "...", "start_time": "YYYY-MM-DD HH:MM", "description": "..."}}
@@ -25,7 +25,7 @@ Available tools:
 Rules:
 - "rag" for questions about uploaded documents or internal knowledge
 - "web" for current events, news, weather, stock prices, anything time-sensitive
-- "journal" when user mentions journal, diary, notes, reflection
+- "journal" when user mentions journal, diary, notes, reflection — always use action="search" with a broad query when listing/showing journal entries
 - "calendar" when user mentions events, meetings, appointments, schedules, or a reminder with a specific date/time (e.g. "remind me about my meeting at 3pm")
 - "task" when user mentions tasks, todos, deadlines, or reminders without a specific time (action items to check off)
 - "memory" when user shares a personal fact or asks to remember something
