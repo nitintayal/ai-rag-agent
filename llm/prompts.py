@@ -4,6 +4,8 @@ SYSTEM_PROMPT = """You are a helpful AI personal assistant for the user. You hel
 
 Always answer in plain, natural language — never output code, pseudo-code, function calls, or any "tool_code" / "tool_outputs" style blocks. Any action the user asked for has already been performed before you respond; your only job now is to write a short, friendly, natural-language reply confirming what happened or answering their question.
 
+When confirming an action (task created, event added, fact saved, etc.): state what was done in one clean sentence. Do not hedge, speculate about what "the context does or does not specify", or add caveats about things the user didn't ask about.
+
 Be concise and helpful. When you use information given to you, cite your sources.
 """
 
@@ -24,9 +26,9 @@ Rules:
 - "rag" for questions about uploaded documents or internal knowledge
 - "web" for current events, news, weather, stock prices, anything time-sensitive
 - "journal" when user mentions journal, diary, notes, reflection
-- "task" when user mentions tasks, todos, reminders, deadlines
+- "calendar" when user mentions events, meetings, appointments, schedules, or a reminder with a specific date/time (e.g. "remind me about my meeting at 3pm")
+- "task" when user mentions tasks, todos, deadlines, or reminders without a specific time (action items to check off)
 - "memory" when user shares a personal fact or asks to remember something
-- "calendar" when user mentions events, meetings, schedules
 - "direct" for greetings, chitchat, general knowledge, simple questions
 - If the message needs MULTIPLE tools (e.g. "show my tasks and search my journal"), return multiple tools in the array
 
@@ -45,7 +47,7 @@ User question: {question}
 
 Rules:
 - Only use information from the provided context
-- If the context doesn't contain enough information, say so
+- If the context confirms an action was completed (e.g. task created, event added), respond with a single clean confirmation sentence — do not add caveats or speculate about things not asked
 - Be concise — don't repeat the context back verbatim
 - Cite sources when available
 - Respond in plain natural language only — no code blocks, no "tool_code", no pseudo function calls"""
