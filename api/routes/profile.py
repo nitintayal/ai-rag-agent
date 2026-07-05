@@ -13,7 +13,7 @@ from storage.repositories import user_repo
 
 router = APIRouter(prefix="/auth")
 
-_VALID_LLM_PROVIDERS = {"gemini", "openrouter", "ollama", None, ""}
+_VALID_LLM_PROVIDERS = {"gemini", "openrouter", "ollama", "anthropic", None, ""}
 
 
 @router.get("/me")
@@ -31,7 +31,7 @@ def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_current_
 @router.patch("/llm-settings")
 def update_llm_settings(body: UpdateLlmSettingsRequest, user: dict = Depends(get_current_user)):
     if body.llm_provider not in _VALID_LLM_PROVIDERS and body.llm_provider is not None:
-        raise HTTPException(400, "Invalid provider. Use one of: gemini, openrouter, ollama")
+        raise HTTPException(400, "Invalid provider. Use one of: gemini, openrouter, ollama, anthropic")
 
     # Empty string means "reset to global default" / "clear saved key"
     provider = body.llm_provider or None
