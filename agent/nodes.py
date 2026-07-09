@@ -122,14 +122,21 @@ def execute_tool(state: AgentState) -> dict:
         merged = {"query": state["question"], **args}
         return tool.execute(user_id=state["user_id"], **merged)
 
-    # Multi-tool: execute all and merge context
+    # Multi-tool: execute all in parallel and merge context
     if tools_plan and len(tools_plan) > 1:
+        from concurrent.futures import ThreadPoolExecutor
+
+        plans = [p for p in tools_plan if p["tool"] != "direct"]
+
+        def _run_plan(plan):
+            return plan, _run_tool(plan["tool"], plan.get("args", {}))
+
+        with ThreadPoolExecutor(max_workers=len(plans)) as executor:
+            results = list(executor.map(_run_plan, plans))
+
         all_context = []
         all_sources = []
-        for plan in tools_plan:
-            if plan["tool"] == "direct":
-                continue
-            result = _run_tool(plan["tool"], plan.get("args", {}))
+        for plan, result in results:
             if not result:
                 continue
             if result.ok and result.context:
