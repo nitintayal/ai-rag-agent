@@ -81,6 +81,16 @@ def route(state: AgentState) -> dict:
         # Validate
         valid = [t for t in tools_list if t.get("tool") in _VALID_TOOLS]
         if valid:
+            # If LLM chose "direct" but keywords suggest a tool, override
+            if len(valid) == 1 and valid[0]["tool"] == "direct":
+                kw = _keyword_fallback_route(question)
+                if kw[0]["tool"] != "direct":
+                    logger.info(f"LLM said direct but keyword override: {[t['tool'] for t in kw]}")
+                    return {
+                        "tool": kw[0]["tool"],
+                        "tool_args": kw[0].get("args", {}),
+                        "tools_plan": kw if len(kw) > 1 else None,
+                    }
             logger.info(f"LLM routed to: {[t['tool'] for t in valid]}")
             first = valid[0]
             return {
