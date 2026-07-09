@@ -44,6 +44,7 @@ Examples:
 - "create a reminder for my meeting tomorrow at 10 AM" → {{"tools": [{{"tool": "calendar", "args": {{"action": "create", "title": "Meeting", "start_time": "YYYY-MM-DD 10:00"}}}}]}}
 - "add a task to review the report" → {{"tools": [{{"tool": "task", "args": {{"action": "create", "title": "Review the report"}}}}]}}
 - "what's the weather today" → {{"tools": [{{"tool": "web", "args": {{"query": "weather today"}}}}]}}
+- "show my tasks, meetings and search my journal. And 2 latest news today" → {{"tools": [{{"tool": "task", "args": {{"action": "list"}}}}, {{"tool": "calendar", "args": {{"action": "list"}}}}, {{"tool": "journal", "args": {{"action": "list"}}}}, {{"tool": "web", "args": {{"query": "latest news today"}}}}]}}
 - "hello" → {{"tools": [{{"tool": "direct", "args": {{}}}}]}}
 
 User message: {question}

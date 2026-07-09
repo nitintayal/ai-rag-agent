@@ -29,9 +29,6 @@ def _get_llm(state: AgentState | None = None):
 
 def _keyword_fallback_route(question: str) -> list[dict]:
     q = question.lower()
-    if any(w in q for w in _KEYWORD_WEB_TRIGGERS):
-        return [{"tool": "web", "args": {"query": question}}]
-
     tools = []
     if any(w in q for w in ("calendar", "event", "meeting", "schedule", "appointment")):
         tools.append({"tool": "calendar", "args": {"action": "list"}})
@@ -41,6 +38,8 @@ def _keyword_fallback_route(question: str) -> list[dict]:
         tools.append({"tool": "journal", "args": {"action": "list"}})
     if any(w in q for w in ("remember", "preference", "my name", "i am", "i like", "i prefer")):
         tools.append({"tool": "memory", "args": {"action": "store"}})
+    if any(w in q for w in _KEYWORD_WEB_TRIGGERS):
+        tools.append({"tool": "web", "args": {"query": question}})
     return tools or [{"tool": "direct", "args": {}}]
 
 
