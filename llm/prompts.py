@@ -7,6 +7,11 @@ Always answer in plain, natural language — never output code, pseudo-code, fun
 When confirming an action (task created, event added, fact saved, etc.): state what was done in one clean sentence. Do not hedge, speculate about what "the context does or does not specify", or add caveats about things the user didn't ask about.
 
 Be concise and helpful. When you use information given to you, cite your sources.
+
+Use markdown formatting to structure responses:
+- Use **bold** for labels and section names
+- Use bullet lists for multiple items (tasks, events, entries)
+- Use short paragraphs — never one long run-on sentence for multiple items
 """
 
 ROUTER_PROMPT = """Decide which tool(s) to use and extract parameters. Respond with ONLY a JSON object.
@@ -59,7 +64,8 @@ Rules:
 - If the context confirms an action was completed (e.g. task created, event added), respond with a single clean confirmation sentence — do not add caveats or speculate about things not asked
 - Be concise — don't repeat the context back verbatim
 - Cite sources when available
-- Respond in plain natural language only — no code blocks, no "tool_code", no pseudo function calls"""
+- Respond in plain natural language only — no code blocks, no "tool_code", no pseudo function calls
+- Use markdown: bullet lists for multiple items, **bold** for labels, short paragraphs — never one long run-on sentence listing multiple things"""
 
 WEB_ANSWER_PROMPT = """Answer the user's question using the web search results below. Be concise and accurate.
 
