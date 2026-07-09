@@ -98,12 +98,13 @@ def search_entries(user_id: str, query: str, k: int = 5) -> list[dict]:
         results.sort(key=lambda x: x["score"], reverse=True)
         return results[:k]
     except ImportError:
-        # No ML libs — fall back to text matching
-        q = query.lower()
+        # No ML libs — fall back to keyword matching, or return all if query is generic
+        q = query.lower().strip()
         results = []
         for row in result.data:
             text = f"{row.get('title', '')} {row.get('content', '')}".lower()
-            if q in text:
+            words = [w for w in q.split() if len(w) > 3 and w not in {"show", "search", "find", "my", "the", "and", "journal", "entries"}]
+            if not words or any(w in text for w in words):
                 results.append({"entry": _serialize(row), "score": 1.0})
         return results[:k]
 

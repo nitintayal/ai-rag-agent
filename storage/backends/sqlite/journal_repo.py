@@ -119,11 +119,12 @@ def search_entries(user_id: str, query: str, k: int = 5) -> list[dict]:
         results.sort(key=lambda x: x["score"], reverse=True)
         return results[:k]
     except ImportError:
-        q = query.lower()
+        q = query.lower().strip()
         results = []
         for row in rows:
             text = f"{row['title'] or ''} {row['content'] or ''}".lower()
-            if q in text:
+            words = [w for w in q.split() if len(w) > 3 and w not in {"show", "search", "find", "my", "the", "and", "journal", "entries"}]
+            if not words or any(w in text for w in words):
                 results.append({"entry": _serialize_row(row), "score": 1.0})
         return results[:k]
 
