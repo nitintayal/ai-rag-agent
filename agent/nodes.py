@@ -31,15 +31,17 @@ def _keyword_fallback_route(question: str) -> list[dict]:
     q = question.lower()
     if any(w in q for w in _KEYWORD_WEB_TRIGGERS):
         return [{"tool": "web", "args": {"query": question}}]
-    if any(w in q for w in ("journal", "diary", "note", "reflect")):
-        return [{"tool": "journal", "args": {"action": "search", "query": question}}]
+
+    tools = []
     if any(w in q for w in ("calendar", "event", "meeting", "schedule", "appointment")):
-        return [{"tool": "calendar", "args": {"action": "list"}}]
+        tools.append({"tool": "calendar", "args": {"action": "list"}})
     if any(w in q for w in ("task", "todo", "remind", "deadline")):
-        return [{"tool": "task", "args": {"action": "list"}}]
+        tools.append({"tool": "task", "args": {"action": "list"}})
+    if any(w in q for w in ("journal", "diary", "note", "reflect")):
+        tools.append({"tool": "journal", "args": {"action": "search", "query": question}})
     if any(w in q for w in ("remember", "preference", "my name", "i am", "i like", "i prefer")):
-        return [{"tool": "memory", "args": {"action": "store"}}]
-    return [{"tool": "direct", "args": {}}]
+        tools.append({"tool": "memory", "args": {"action": "store"}})
+    return tools or [{"tool": "direct", "args": {}}]
 
 
 # ── Node: route ──────────────────────────────────────────────────
@@ -90,11 +92,11 @@ def route(state: AgentState) -> dict:
         logger.debug(f"LLM routing failed, using keyword fallback: {e}")
 
     fallback = _keyword_fallback_route(question)
-    logger.info(f"Keyword routed to: {fallback[0]['tool']}")
+    logger.info(f"Keyword routed to: {[t['tool'] for t in fallback]}")
     return {
         "tool": fallback[0]["tool"],
         "tool_args": fallback[0].get("args", {}),
-        "tools_plan": None,
+        "tools_plan": fallback if len(fallback) > 1 else None,
     }
 
 
