@@ -32,6 +32,15 @@ Rules:
 - "direct" for greetings, chitchat, general knowledge, simple questions
 - If the message needs MULTIPLE tools (e.g. "show my tasks and search my journal"), return multiple tools in the array
 
+Examples:
+- "show my tasks and search my journal" → {{"tools": [{{"tool": "task", "args": {{"action": "list"}}}}, {{"tool": "journal", "args": {{"action": "search", "query": ""}}}}]}}
+- "search my journal for standup" → {{"tools": [{{"tool": "journal", "args": {{"action": "search", "query": "standup"}}}}]}}
+- "show journal entries from last week" → {{"tools": [{{"tool": "journal", "args": {{"action": "list"}}}}]}}
+- "create a reminder for my meeting tomorrow at 10 AM" → {{"tools": [{{"tool": "calendar", "args": {{"action": "create", "title": "Meeting", "start_time": "YYYY-MM-DD 10:00"}}}}]}}
+- "add a task to review the report" → {{"tools": [{{"tool": "task", "args": {{"action": "create", "title": "Review the report"}}}}]}}
+- "what's the weather today" → {{"tools": [{{"tool": "web", "args": {{"query": "weather today"}}}}]}}
+- "hello" → {{"tools": [{{"tool": "direct", "args": {{}}}}]}}
+
 User message: {question}
 
 For single tool: {{"tools": [{{"tool": "<name>", "args": {{...}}}}]}}

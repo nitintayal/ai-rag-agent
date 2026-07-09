@@ -38,7 +38,7 @@ def _keyword_fallback_route(question: str) -> list[dict]:
     if any(w in q for w in ("task", "todo", "remind", "deadline")):
         tools.append({"tool": "task", "args": {"action": "list"}})
     if any(w in q for w in ("journal", "diary", "note", "reflect")):
-        tools.append({"tool": "journal", "args": {"action": "search", "query": question}})
+        tools.append({"tool": "journal", "args": {"action": "list"}})
     if any(w in q for w in ("remember", "preference", "my name", "i am", "i like", "i prefer")):
         tools.append({"tool": "memory", "args": {"action": "store"}})
     return tools or [{"tool": "direct", "args": {}}]
