@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from fastapi import Header, HTTPException
+from fastapi import Depends, Header, HTTPException
 
 from auth.jwt_utils import decode_token
 from configs.config import settings
@@ -21,4 +21,10 @@ async def get_current_user(authorization: Optional[str] = Header(default=None)) 
     user = user_repo.get_user(payload["sub"])
     if not user:
         user = user_repo.ensure_user(payload["sub"], payload.get("email", ""))
+    return user
+
+
+async def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    if not user.get("is_admin"):
+        raise HTTPException(403, "Admin access required")
     return user

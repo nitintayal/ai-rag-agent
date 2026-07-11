@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS users (
     llm_provider TEXT,
     llm_model   TEXT,
     llm_api_key TEXT,
+    is_admin    INTEGER NOT NULL DEFAULT 0,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

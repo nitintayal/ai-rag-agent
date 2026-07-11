@@ -32,6 +32,8 @@ def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_current_
 def update_llm_settings(body: UpdateLlmSettingsRequest, user: dict = Depends(get_current_user)):
     if body.llm_provider not in _VALID_LLM_PROVIDERS and body.llm_provider is not None:
         raise HTTPException(400, "Invalid provider. Use one of: gemini, openrouter, ollama, anthropic")
+    if body.llm_provider == "anthropic" and not user.get("is_admin"):
+        raise HTTPException(403, "Anthropic provider is restricted to admins")
 
     # Empty string means "reset to global default" / "clear saved key"
     provider = body.llm_provider or None
@@ -44,18 +46,22 @@ def update_llm_settings(body: UpdateLlmSettingsRequest, user: dict = Depends(get
 
 
 @router.get("/llm-settings/available")
-def available_llm_settings():
+def available_llm_settings(user: dict = Depends(get_current_user)):
     from llm.factory import AVAILABLE_MODELS
     from configs.config import settings
+    is_admin = bool(user.get("is_admin"))
+    providers_configured = {
+        "gemini": bool(settings.GOOGLE_API_KEY),
+        "openrouter": bool(settings.OPENROUTER_API_KEY),
+        "ollama": True,
+    }
+    if is_admin:
+        providers_configured["anthropic"] = bool(settings.ANTHROPIC_API_KEY)
+    models = {k: v for k, v in AVAILABLE_MODELS.items() if k in providers_configured}
     return {
-        "models": AVAILABLE_MODELS,
+        "models": models,
         "global_default_provider": settings.LLM_PROVIDER,
-        "providers_configured": {
-            "gemini": bool(settings.GOOGLE_API_KEY),
-            "openrouter": bool(settings.OPENROUTER_API_KEY),
-            "ollama": True,
-            "anthropic": bool(settings.ANTHROPIC_API_KEY),
-        },
+        "providers_configured": providers_configured,
     }
 
 

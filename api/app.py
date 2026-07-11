@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from configs.config import settings
 from storage.factory import get_backend
 
-from api.routes import health, auth, profile, chat, conversations, documents, journal, tasks, calendar, push
+from api.routes import health, auth, profile, chat, conversations, documents, journal, tasks, calendar, push, admin
 
 
 @asynccontextmanager
@@ -51,6 +51,7 @@ app.include_router(journal.router)
 app.include_router(tasks.router)
 app.include_router(calendar.router)
 app.include_router(push.router)
+app.include_router(admin.router)
 
 
 def start():

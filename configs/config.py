@@ -123,3 +123,14 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Apply runtime overrides (set by admin via /admin/switch-db etc.)
+# These override env vars and survive process restarts on persistent disks.
+# On Render (ephemeral disk) they reset on redeploy — that's expected.
+try:
+    from storage.runtime_config import load as _load_runtime
+    for _k, _v in _load_runtime().items():
+        if hasattr(settings, _k):
+            setattr(settings, _k, _v)
+except Exception:
+    pass
