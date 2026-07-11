@@ -58,6 +58,12 @@ def export_to_sqlite() -> str:
     from configs.config import settings
     from storage.database import _SCHEMA
 
+    # Strip ALTER TABLE migration lines — only needed for existing DBs, not fresh exports
+    clean_schema = "\n".join(
+        line for line in _SCHEMA.splitlines()
+        if not line.strip().upper().startswith("ALTER TABLE")
+    )
+
     data = _fetch_all(settings.DB_BACKEND)
 
     tmp = tempfile.NamedTemporaryFile(
@@ -68,7 +74,7 @@ def export_to_sqlite() -> str:
     tmp.close()
 
     conn = sqlite3.connect(tmp.name)
-    conn.executescript(_SCHEMA)
+    conn.executescript(clean_schema)
 
     for table, rows in data.items():
         if not rows:
