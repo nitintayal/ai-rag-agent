@@ -95,3 +95,46 @@ When adding columns to `users` or other tables, update **three places**:
 1. `storage/database.py` (`_SCHEMA` — SQLite, used fresh on every deploy since data resets)
 2. `storage/backends/supabase/schema.sql` (for fresh Supabase projects)
 3. An `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` migration snippet for existing Supabase projects (idempotent, safe to re-run)
+
+## Recent Changes (2026-07-12)
+
+### LLM
+- **Anthropic/Claude Haiku 4.5** added: `llm/anthropic_client.py`, `llm/factory.py`, `configs/config.py`, `requirements*.txt`, `.env.example`
+- **Anthropic restricted to admins**: `api/routes/profile.py` — non-admins get 403; `GET /auth/llm-settings/available` omits anthropic for non-admins
+
+### Agent routing (`agent/nodes.py`, `llm/prompts.py`)
+- Keyword fallback accumulates ALL matching tools (no early return) — multi-tool works from fallback
+- Web trigger no longer short-circuits — fires alongside task/journal/calendar
+- LLM `direct` override: if LLM says direct but keywords match a tool, keyword wins
+- Multi-tool execution runs in parallel via `ThreadPoolExecutor`
+- Few-shot examples added to `ROUTER_PROMPT` including multi-tool + web combos
+- Markdown formatting rules added to `SYSTEM_PROMPT` and `ANSWER_PROMPT`
+
+### Journal tool (`tools/journal_tool.py`, `storage/backends/*/journal_repo.py`)
+- `list` action returns full content (not just title)
+- `search` with empty query falls back to `list`
+- No-ML search fallback returns all entries if no meaningful keywords found
+
+### Admin features (`api/routes/admin.py`, `storage/`)
+- `require_admin` dependency in `api/dependencies.py`
+- `GET /admin/users`, `POST /admin/promote` — user management
+- `GET /admin/db-status`, `POST /admin/switch-db` — runtime DB switching (sqlite ↔ supabase)
+- `GET /admin/export-db` — download full DB as portable SQLite file from any backend
+- `storage/exporter.py` — exports any backend's data to SQLite
+- `storage/runtime_config.py` — persists runtime overrides across restarts (non-ephemeral disks only)
+- `users` table: `is_admin INTEGER DEFAULT 0` column added
+
+### Frontend (`ai-rag-ui/src/components/`)
+- `LoginPage.jsx`: reset password mode (detects `?reset_email=&code=` URL params); "Forgot password?" always visible
+- `SettingsPanel.jsx`: admin section with "Export Database (SQLite)" download button (admin only)
+
+## Pending deploys to iassistant.in
+All above files changed locally, NOT yet deployed to Render/Vercel. Also needed in Render dashboard:
+- `FRONTEND_URL=https://iassistant.in` — fixes reset password links pointing to localhost
+- `ANTHROPIC_API_KEY=sk-ant-...` — needed for Anthropic provider
+
+## Supabase migration (run once in SQL editor)
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false;
+UPDATE users SET is_admin = true WHERE email = 'your-admin@email.com';
+```
